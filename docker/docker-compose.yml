@@ -1,0 +1,36 @@
+services:
+  isaac-sim:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: isaac-sim-ur5e
+    network_mode: host
+    shm_size: "1gb"
+    environment:
+      - ACCEPT_EULA=Y
+      - PRIVACY_CONSENT=Y
+      - DISPLAY=${DISPLAY}
+    volumes:
+      # X11 socket for GUI
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      # Isaac Sim caches
+      - ${HOME}/docker/isaac-sim/cache/main:/root/.cache/isaac-sim
+      - ${HOME}/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache
+      - ${HOME}/docker/isaac-sim/data:/root/.local/share/ov/data
+      # SSH and Git config from host
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+      # Workspace
+      - ..:/workspaces/isaac-sim-ur5e
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    stdin_open: true
+    tty: true
+    command: sleep infinity
