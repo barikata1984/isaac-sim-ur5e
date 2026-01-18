@@ -7,9 +7,10 @@ import sys
 import numpy as np
 import threading
 import queue
+import argparse
 
 sys.path.insert(0, "/workspaces/isaac-sim-ur5e")
-from src.env_loader import create_ur5e_env
+from src.env_loader import create_manipulator_env, get_available_manipulators
 from omni.isaac.motion_generation import LulaKinematicsSolver
 from omni.isaac.motion_generation import interface_config_loader
 from omni.isaac.core.utils.types import ArticulationAction
@@ -48,22 +49,32 @@ def parse_input(input_str):
 
 
 def main():
-    world, ur5e_robot = create_ur5e_env(simulation_app)
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Simple manipulator control with IK")
+    parser.add_argument(
+        "--manipulator", "-m",
+        type=str,
+        default="ur5e",
+        help=f"Manipulator to use. Available: {get_available_manipulators()}"
+    )
+    args = parser.parse_args()
+    
+    world, robot, end_effector_frame, ik_name = create_manipulator_env(simulation_app, args.manipulator)
     if world is None:
         simulation_app.close()
         return
 
-    # Initialize IK Solver
+    # Initialize IK Solver using the correct IK name from registry
     try:
-        kinematics_config = interface_config_loader.load_supported_lula_kinematics_solver_config("UR5e")
+        kinematics_config = interface_config_loader.load_supported_lula_kinematics_solver_config(ik_name)
         ik_solver = LulaKinematicsSolver(**kinematics_config)
+        ik_enabled = True
+        print(f"IK solver loaded for: {ik_name}")
     except Exception as e:
-        print(f"Error initializing IK solver: {e}")
-        print("Available robots:", interface_config_loader.get_supported_robots())
-        simulation_app.close()
-        return
-
-    end_effector_frame = "tool0"
+        print(f"Warning: IK solver not available for {args.manipulator}: {e}")
+        print("Running in visualization-only mode (no IK control).")
+        ik_solver = None
+        ik_enabled = False
 
     world.reset()
     
@@ -71,9 +82,16 @@ def main():
     for _ in range(20):
         world.step(render=True)
 
-    print("\n--- UR5e Control Initialized ---")
+    print(f"\n--- {args.manipulator.upper()} Control Initialized ---")
     print(f"Controlling frame: {end_effector_frame}")
     print("You can now interact with the GUI (rotate camera, zoom, etc.)")
+    
+    if not ik_enabled:
+        print("\n[Visualization mode - use GUI to interact]")
+        while simulation_app.is_running():
+            world.step(render=True)
+        simulation_app.close()
+        return
 
     # Create input queue and start input thread
     input_queue = queue.Queue()
@@ -105,7 +123,7 @@ def main():
                 
             print(f"Attempting to reach: {target_pos}")
             
-            current_pose = ur5e_robot.get_world_pose()
+            current_pose = robot.get_world_pose()
             target_orientation = current_pose[1] 
             
             # compute_inverse_kinematics returns (joint_positions, success_flag)
@@ -118,7 +136,7 @@ def main():
             if ik_converged:
                 print("Target is REACHABLE. Moving...")
                 action = ArticulationAction(joint_positions=joint_positions)
-                ur5e_robot.get_articulation_controller().apply_action(action)
+                robot.get_articulation_controller().apply_action(action)
                 move_steps_remaining = 60  # Let the robot move for ~1 second
             else:
                 print("!!! WARNING: Target likely OUT OF REACH or invalid configuration !!!")

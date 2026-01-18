@@ -5,6 +5,10 @@
     "workspaceFolder": "/workspaces/isaac-sim-ur5e",
     "remoteUser": "root",
     "overrideCommand": true,
+    "containerEnv": {
+        "GIT_CONFIG_GLOBAL": "/tmp/.gitconfig"
+    },
+    "postStartCommand": "git config --global --add safe.directory /workspaces/isaac-sim-ur5e",
     "customizations": {
         "vscode": {
             "extensions": [
