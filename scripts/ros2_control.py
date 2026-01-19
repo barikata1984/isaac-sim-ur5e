@@ -29,8 +29,20 @@ headless = args.headless.lower() == "true"
 
 from omni.isaac.kit import SimulationApp
 
-# Launch the simulator in the script
-simulation_app = SimulationApp({"headless": headless})
+# Launch the simulator with explicit window configuration
+config = {
+    "headless": headless,
+    "open_usd": None,
+    "width": 1280,
+    "height": 720,
+    "window_width": 1920,
+    "window_height": 1080,
+    "renderer": "RayTracedLighting",
+    "anti_aliasing": 3,  # FXAA
+    "active_gpu": 0,
+    "physics_gpu": 0,
+}
+simulation_app = SimulationApp(config)
 
 import numpy as np
 
@@ -40,7 +52,12 @@ from omni.isaac.motion_generation import LulaKinematicsSolver
 from omni.isaac.motion_generation import interface_config_loader
 from omni.isaac.core.utils.types import ArticulationAction
 
-# Import ROS2 after Isaac Sim is initialized
+# ============================================
+# ROS2 Bridge Setup
+# ============================================
+# This script must be run via run_isaac_ros2.sh to avoid conflicts
+# between container's ROS2 and Isaac Sim's ROS2 bridge.
+
 # Enable ROS2 bridge extension
 import omni.ext
 manager = omni.kit.app.get_app().get_extension_manager()

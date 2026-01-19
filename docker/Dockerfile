@@ -36,9 +36,14 @@ RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
 # 標準的なコマンドが確実に使えるようにパスを設定
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
 
-# python.sh へのシンボリックリンクを作成
-# これにより、どこからでも "python" と打つだけで Isaac Sim 環境が立ち上がります
-RUN ln -s /isaac-sim/python.sh /usr/local/bin/python
+# Allow Isaac Sim to run as root user in container
+ENV OMNI_KIT_ALLOW_ROOT=1
+
+# python.sh へのラッパースクリプトを作成
+# シンボリックリンクだとSCRIPT_DIRが正しく解決されないためラッパーを使用
+RUN echo '#!/bin/bash' > /usr/local/bin/python \
+    && echo 'exec /isaac-sim/python.sh "$@"' >> /usr/local/bin/python \
+    && chmod +x /usr/local/bin/python
 
 # ログイン時に自動でワークスペースに移動するように設定
 RUN echo "cd /workspaces/isaac-sim-ur5e" >> /root/.bashrc

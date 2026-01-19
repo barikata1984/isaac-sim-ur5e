@@ -44,11 +44,12 @@ def generate_launch_description():
     headless = LaunchConfiguration('headless')
     use_target_publisher = LaunchConfiguration('use_target_publisher')
     
-    # Isaac Sim ROS2 control (runs via Isaac Sim's Python)
-    # Note: Isaac Sim scripts need to be launched through its own Python environment
+    # Isaac Sim ROS2 control
+    # Uses run_isaac_ros2.sh wrapper to isolate Isaac Sim's ROS2 bridge
+    # from container's ROS2 environment
     isaac_sim_control = ExecuteProcess(
         cmd=[
-            os.path.join(pkg_dir, 'scripts', 'run_ros2.sh'),
+            os.path.join(scripts_dir, 'run_isaac_ros2.sh'),
             os.path.join(scripts_dir, 'ros2_control.py'),
             '--manipulator', manipulator,
             '--headless', headless,
