@@ -4,7 +4,10 @@
     "service": "isaac-sim",
     "workspaceFolder": "/workspaces/isaac-sim-ur5e",
     "remoteUser": "root",
+    "updateRemoteUserUID": false,
     "overrideCommand": true,
+    "shutdownAction": "none",
+    "initializeCommand": "docker compose -f ${localWorkspaceFolder}/docker/docker-compose.yml up -d --wait",
     "containerEnv": {
         "GIT_CONFIG_GLOBAL": "/tmp/.gitconfig"
     },

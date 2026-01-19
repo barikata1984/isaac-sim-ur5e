@@ -3,6 +3,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    pull_policy: build
     container_name: isaac-sim-ur5e
     network_mode: host
     shm_size: "1gb"
