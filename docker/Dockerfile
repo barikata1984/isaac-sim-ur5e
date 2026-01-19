@@ -45,6 +45,9 @@ RUN echo '#!/bin/bash' > /usr/local/bin/python \
     && echo 'exec /isaac-sim/python.sh "$@"' >> /usr/local/bin/python \
     && chmod +x /usr/local/bin/python
 
+# Git設定: コンテナ内で書き込み可能な場所を使用
+RUN echo "export GIT_CONFIG_GLOBAL=/tmp/.gitconfig" >> /root/.bashrc
+
 # ログイン時に自動でワークスペースに移動するように設定
 RUN echo "cd /workspaces/isaac-sim-ur5e" >> /root/.bashrc
 
