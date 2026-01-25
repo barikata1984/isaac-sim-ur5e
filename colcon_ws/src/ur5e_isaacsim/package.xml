@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ur5e_isaacsim</name>
+  <version>0.0.1</version>
+  <description>Isaac Sim GUI launcher with UR5e robot spawning as ROS2 node</description>
+  <maintainer email="franche1984@gmail.com">root</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
