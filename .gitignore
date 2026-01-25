@@ -1,6 +1,12 @@
+build/
+install/
+log/
 colcon_ws/build/
 colcon_ws/install/
 colcon_ws/log/
+**/__pycache__/
+*.pyc
+**/results/
 
 # Agent configuration symlinks
 AGENTS.md
