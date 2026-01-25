@@ -1,0 +1,3 @@
+[submodule ".agent"]
+	path = .agent
+	url = https://github.com/barikata1984/.agent
