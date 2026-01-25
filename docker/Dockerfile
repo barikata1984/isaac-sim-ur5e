@@ -34,7 +34,13 @@ RUN apt-get update \
         ros-jazzy-geometry-msgs \
         ros-jazzy-std-msgs \
         python3-colcon-common-extensions \
+        python3-tk \
+        python3-pip \
+        python3-matplotlib \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN python3 -m pip install tyro --break-system-packages
 
 # Source ROS2 in bashrc
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
@@ -45,6 +51,7 @@ RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc
 
 # 標準的なコマンドが確実に使えるようにパスを設定
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
+ENV MPLBACKEND=TkAgg
 
 # Allow Isaac Sim to run as root user in container
 ENV OMNI_KIT_ALLOW_ROOT=1

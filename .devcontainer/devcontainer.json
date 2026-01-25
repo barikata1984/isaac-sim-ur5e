@@ -7,7 +7,7 @@
     "updateRemoteUserUID": false,
     "overrideCommand": true,
     "shutdownAction": "none",
-    "initializeCommand": "docker compose -f ${localWorkspaceFolder}/docker/docker-compose.yml up -d --wait",
+    "initializeCommand": "xhost +local:docker && touch /tmp/.docker.xauth && docker compose -f ${localWorkspaceFolder}/docker/docker-compose.yml up -d --wait",
     "containerEnv": {
         "GIT_CONFIG_GLOBAL": "/tmp/.gitconfig"
     },

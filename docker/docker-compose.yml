@@ -11,9 +11,11 @@ services:
       - ACCEPT_EULA=Y
       - PRIVACY_CONSENT=Y
       - DISPLAY=${DISPLAY}
+      - XAUTHORITY=/tmp/.docker.xauth
     volumes:
       # X11 socket for GUI
       - /tmp/.X11-unix:/tmp/.X11-unix
+      - /tmp/.docker.xauth:/tmp/.docker.xauth
       # Isaac Sim caches
       - ${HOME}/docker/isaac-sim/cache/main:/root/.cache/isaac-sim
       - ${HOME}/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache
