@@ -1,0 +1,40 @@
+# ROS2 colcon artifacts
+build/
+install/
+log/
+colcon_ws/build/
+colcon_ws/install/
+colcon_ws/log/
+
+# Python
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.toast
+.lucas
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.mypy_cache/
+.pytest_cache/
+
+# Isaac Sim / Results
+**/results/
+*.png
+*.json
+
+# Agent configuration symlinks
+AGENTS.md
+.github/skills
+
+# System
+.DS_Store
