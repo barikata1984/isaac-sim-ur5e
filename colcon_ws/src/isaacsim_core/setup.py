@@ -1,13 +1,14 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import os
 from glob import glob
 
-package_name = 'ur5e_isaacsim'
+package_name = 'isaacsim_core'
 
 setup(
     name=package_name,
-    version='0.0.1',
-    packages=[package_name],
+    version='0.1.0',
+    packages=find_packages(where='src'),
+    package_dir={'': 'src'},
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
@@ -17,13 +18,13 @@ setup(
     zip_safe=True,
     maintainer='root',
     maintainer_email='franche1984@gmail.com',
-    description='Isaac Sim GUI launcher with UR5e robot spawning',
+    description='Isaac Sim GUI launcher with modular isaacsim_core package',
     license='MIT',
     tests_require=['pytest'],
-    scripts=['scripts/spawn_ur5e_wrapper.sh'],
+    scripts=['scripts/isaac_sim_gui.sh'],
     entry_points={
         'console_scripts': [
-            'spawn_ur5e_node = ur5e_isaacsim.spawn_ur5e_node:main',
+            'isaac_sim_node = isaacsim_core.main:main',
         ],
     },
 )
