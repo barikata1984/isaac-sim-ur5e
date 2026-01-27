@@ -7,8 +7,8 @@ package_name = 'isaacsim_core'
 setup(
     name=package_name,
     version='0.1.0',
-    packages=find_packages(where='src'),
-    package_dir={'': 'src'},
+    packages=['isaacsim_core'] + ['isaacsim_core.' + p for p in find_packages(where='src')],
+    package_dir={'isaacsim_core': 'src'},
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
