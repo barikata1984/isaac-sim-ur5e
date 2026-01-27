@@ -55,6 +55,7 @@ RUN ln -s /isaac-sim/python.sh /usr/local/bin/python
 
 # シェルログイン時に ROS2 環境とワークスペースをセットアップ
 RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc \
+    && echo "if [ -f \"/workspaces/isaac-sim-ur5e/colcon_ws/install/setup.bash\" ]; then source /workspaces/isaac-sim-ur5e/colcon_ws/install/setup.bash; fi" >> /root/.bashrc \
     && echo "cd /workspaces/isaac-sim-ur5e" >> /root/.bashrc
 
 USER root
