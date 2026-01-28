@@ -9,6 +9,8 @@ from trajectory import (
     SplineTrajectoryConfig,
     WindowTrajectory,
     WindowTrajectoryConfig,
+    WindowedFourierTrajectory,
+    WindowedFourierTrajectoryConfig,
 )
 
 
@@ -17,6 +19,7 @@ ConfigType = Union[
     Annotated[SplineTrajectoryConfig, tyro.conf.subcommand(name="spline")],
     Annotated[FourierTrajectoryConfig, tyro.conf.subcommand(name="fourier")],
     Annotated[WindowTrajectoryConfig, tyro.conf.subcommand(name="window")],
+    Annotated[WindowedFourierTrajectoryConfig, tyro.conf.subcommand(name="windowed_fourier")],
 ]
 
 
@@ -50,6 +53,8 @@ def main(config: ConfigType) -> None:
         pass
     elif isinstance(config, WindowTrajectoryConfig):
         traj = WindowTrajectory(config)
+    elif isinstance(config, WindowedFourierTrajectoryConfig):
+        traj = WindowedFourierTrajectory(config)
 
     if traj:
         print(f"Generating {config.__class__.__name__}...")

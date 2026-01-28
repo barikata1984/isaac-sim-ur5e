@@ -2,6 +2,7 @@ from .base_trajectory import BaseTrajectory, BaseTrajectoryConfig
 from .fourier import FourierTrajectory, FourierTrajectoryConfig
 from .spline import SplineTrajectory, SplineTrajectoryConfig
 from .window import WindowTrajectory, WindowTrajectoryConfig
+from .windowed_fourier import WindowedFourierTrajectory, WindowedFourierTrajectoryConfig
 
 __all__ = [
     "BaseTrajectory",
@@ -12,4 +13,6 @@ __all__ = [
     "SplineTrajectoryConfig",
     "WindowTrajectory",
     "WindowTrajectoryConfig",
+    "WindowedFourierTrajectory",
+    "WindowedFourierTrajectoryConfig",
 ]

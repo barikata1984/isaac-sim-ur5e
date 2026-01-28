@@ -5,7 +5,7 @@ This package provides a CLI tool for generating various robot trajectories (Spli
 ## Features
 - **Spline Trajectory**: Generates a 5th-order polynomial trajectory between start and end positions.
 - **Fourier Trajectory**: Generates a trajectory based on a finite Fourier series with random or specified coefficients.
-- **Window Trajectory**: Generates a smooth trajectory using a windowing function.
+- **Windowed Fourier Trajectory**: Combines Fourier series oscillation with a window function to ensure start/end positions are smooth (zero velocity).
 
 ## Installation
 
@@ -31,6 +31,11 @@ trajectory_generator fourier --duration 5.0 --fps 50.0 --num-joints 6 --num-harm
 #### Window Trajectory
 ```bash
 trajectory_generator window --duration 5.0 --fps 50.0 --num-joints 6 --show-plot --plot-path src/trajectory/results/window.png --json-path src/trajectory/results/window.json
+```
+
+#### Windowed Fourier Trajectory
+```bash
+trajectory_generator windowed_fourier --duration 10.0 --fps 50.0 --num-joints 6 --num-harmonics 5 --base-freq 0.5 --json-path src/trajectory/results/windowed.json --show-plot --plot-path src/trajectory/results/windowed.png
 ```
 
 #### Spline Trajectory
