@@ -1,5 +1,8 @@
 import json
 import time 
+import sys
+import tty
+import termios
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
@@ -13,6 +16,7 @@ class TrajectoryFollower(Node):
         # Declare parameters
         self.declare_parameter('json_path', '')
         self.declare_parameter('loop', False)
+        self.declare_parameter('auto_start', False)
         
         # Publisher
         self.publisher_ = self.create_publisher(Float64MultiArray, 'joint_commands', 10)
@@ -34,6 +38,7 @@ class TrajectoryFollower(Node):
         self.fps = self.data.get('fps', 60.0)
         self.duration = self.data.get('duration', 0.0)
         self.loop = self.get_parameter('loop').get_parameter_value().bool_value
+        self.auto_start = self.get_parameter('auto_start').get_parameter_value().bool_value
         
         self.current_frame = 0
         self.timer_period = 1.0 / self.fps
@@ -47,16 +52,56 @@ class TrajectoryFollower(Node):
         self.input_thread.daemon = True
         self.input_thread.start()
 
-    def wait_for_start(self):
+    def get_key(self):
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
         try:
-            self.get_logger().info("Press Enter in the terminal to start the trajectory...")
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
+
+    def wait_for_start(self):
+        if self.auto_start:
+            self.get_logger().info("Auto-start enabled. Starting trajectory in 2 seconds...")
+            time.sleep(2)
+            self.active = True
+            self.get_logger().info("Starting trajectory...")
+            return
+
+        # Try to handle interactive input
+        try:
+            if sys.stdin.isatty():
+                self.get_logger().info("Interactive mode: Press Space or Enter to start...")
+                while True:
+                    try:
+                        key = self.get_key()
+                        if key == ' ' or key == '\r' or key == '\n':
+                            self.get_logger().info("Input received. Starting trajectory...")
+                            self.active = True
+                            return
+                        if key == '\x03': # Ctrl+C
+                            self.get_logger().info("Ctrl+C received. Exiting...")
+                            sys.exit(0)
+                    except (termios.error, IOError):
+                        # If raw mode fails mid-stream or isn't supported despite isatty
+                        break 
+            else:
+                 self.get_logger().warn("No interactive TTY detected. Falling back to simple Enter...")
+        except Exception as e:
+            self.get_logger().warn(f"Input setup failed: {e}. Falling back to simple Enter...")
+
+        # Fallback for non-TTY or failed raw mode
+        try:
+            self.get_logger().info("Press Enter to start...")
             input()
             self.get_logger().info("Starting trajectory...")
             self.active = True
-        except EOFError:
-            self.get_logger().warn("Stdin closed, starting immediately after 3 seconds...")
-            time.sleep(3)
-            self.active = True
+        except (EOFError, OSError):
+             self.get_logger().warn("Input stream closed/unavailable. Starting in 3 seconds...")
+             time.sleep(3)
+             self.active = True
 
     def timer_callback(self):
         if not self.active:

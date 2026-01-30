@@ -1,9 +1,10 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
+            schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>traj_follower</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <name>ur</name>
+  <version>0.1.0</version>
+  <description>UR robot spawning package for Isaac Sim ROS 2 integration</description>
   <maintainer email="franche1984@gmail.com">root</maintainer>
   <license>MIT</license>
 

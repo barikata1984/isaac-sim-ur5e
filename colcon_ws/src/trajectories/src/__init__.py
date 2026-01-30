@@ -1,10 +1,20 @@
+"""Trajectories package - unified trajectory generation and playback."""
+
+# Trajectory generation
 from .base_trajectory import BaseTrajectory, BaseTrajectoryConfig
 from .fourier import FourierTrajectory, FourierTrajectoryConfig
 from .spline import SplineTrajectory, SplineTrajectoryConfig
 from .window import WindowTrajectory, WindowTrajectoryConfig
-from .windowed_fourier import WindowedFourierTrajectory, WindowedFourierTrajectoryConfig
+from .windowed_fourier import (
+    WindowedFourierTrajectory,
+    WindowedFourierTrajectoryConfig,
+)
+
+# Trajectory playback
+from .follower_node import main as follower_main
 
 __all__ = [
+    # Generation
     "BaseTrajectory",
     "BaseTrajectoryConfig",
     "FourierTrajectory",
@@ -15,4 +25,7 @@ __all__ = [
     "WindowTrajectoryConfig",
     "WindowedFourierTrajectory",
     "WindowedFourierTrajectoryConfig",
+    # Playback
+    "follower_main",
 ]
+

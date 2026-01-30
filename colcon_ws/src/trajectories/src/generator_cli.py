@@ -2,7 +2,7 @@ import os
 from typing import Annotated, Union
 
 import tyro
-from trajectory import (
+from trajectories import (
     FourierTrajectory,
     FourierTrajectoryConfig,
     SplineTrajectory,

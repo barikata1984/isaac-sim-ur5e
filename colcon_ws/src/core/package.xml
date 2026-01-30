@@ -8,6 +8,7 @@
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
+  <depend>ur</depend>
 
   <exec_depend>ros2launch</exec_depend>
 
