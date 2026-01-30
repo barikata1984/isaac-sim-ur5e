@@ -9,6 +9,10 @@ from .windowed_fourier import (
     WindowedFourierTrajectory,
     WindowedFourierTrajectoryConfig,
 )
+from .windowed_fourier_spline import (
+    WindowedFourierSplineTrajectory,
+    WindowedFourierSplineTrajectoryConfig,
+)
 
 # Trajectory playback
 from .follower_node import main as follower_main
@@ -25,6 +29,8 @@ __all__ = [
     "WindowTrajectoryConfig",
     "WindowedFourierTrajectory",
     "WindowedFourierTrajectoryConfig",
+    "WindowedFourierSplineTrajectory",
+    "WindowedFourierSplineTrajectoryConfig",
     # Playback
     "follower_main",
 ]

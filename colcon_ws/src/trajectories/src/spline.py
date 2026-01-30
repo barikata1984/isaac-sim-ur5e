@@ -205,21 +205,22 @@ class SplineTrajectory(BaseTrajectory):
 
         return coeffs
 
-    def _generate(self, show_plot: bool = False, plot_path: str | None = None, json_path: str | None = None):
-        """Generates the trajectory.
+    def get_value(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Calculate position, velocity, and acceleration at all time steps.
 
         Returns:
-            positions: (num_steps, num_joints)
-            velocities: (num_steps, num_joints)
-            accelerations: (num_steps, num_joints)
-            time_array: (num_steps,)
-
+            pos: (N, num_joints) Position array
+            vel: (N, num_joints) Velocity array
+            acc: (N, num_joints) Acceleration array
         """
-        pos = np.zeros((self.time_steps, self.num_joints))
-        vel = np.zeros((self.time_steps, self.num_joints))
-        acc = np.zeros((self.time_steps, self.num_joints))
+        time_arr = np.atleast_1d(self.time_array)
+        num_steps = len(time_arr)
 
-        for t_idx, t in enumerate(self.time_array):
+        pos = np.zeros((num_steps, self.num_joints))
+        vel = np.zeros((num_steps, self.num_joints))
+        acc = np.zeros((num_steps, self.num_joints))
+
+        for t_idx, t in enumerate(time_arr):
             t2 = t * t
             t3 = t2 * t
             t4 = t3 * t
@@ -242,6 +243,16 @@ class SplineTrajectory(BaseTrajectory):
                     acc[t_idx, j] = 2 * a2 + 6 * a3 * t + 12 * a4 * t2 + 20 * a5 * t3 + 30 * a6 * t4 + 42 * a7 * t5
 
         return pos, vel, acc
+
+    def _generate(self, show_plot: bool = False, plot_path: str | None = None, json_path: str | None = None):
+        """Generates the trajectory.
+
+        Returns:
+            positions: (num_steps, num_joints)
+            velocities: (num_steps, num_joints)
+            accelerations: (num_steps, num_joints)
+        """
+        return self.get_value()
 
 
 if __name__ == "__main__":
