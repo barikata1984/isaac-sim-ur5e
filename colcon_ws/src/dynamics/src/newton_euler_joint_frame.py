@@ -10,19 +10,14 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import numpy as np
+from pymlg import SE3, SO3
 
-from dynamics.lie_algebra import (
-    ad,
-    ad_transpose,
-    adjoint,
-    inverse_transform,
-    skew,
-)
 from dynamics.forward_kinematics import (
     UR5E_DH_PARAMS,
     dh_transform_standard,
 )
 from dynamics.ur5e_parameters import create_ur5e_parameters
+
 
 
 @dataclass
@@ -83,7 +78,7 @@ def compute_spatial_inertia_at_joint(
         G: (6, 6) spatial inertia matrix at joint frame.
     """
     p = com_position
-    p_skew = skew(p)
+    p_skew = SO3.wedge(p)
 
     # Parallel axis theorem for inertia
     # I_j = I_c + m * ([p]× @ [p]×^T)  (note: [p]×^T = -[p]×)
@@ -206,7 +201,7 @@ class NewtonEulerJointFrame:
         T_im1_i = dh_transform_standard(d, a, alpha, theta)
 
         # We need T_{i,i-1} (from i-1 to i)
-        T_i_im1 = inverse_transform(T_im1_i)
+        T_i_im1 = SE3.inverse(T_im1_i)
 
         return T_i_im1
 
@@ -252,14 +247,14 @@ class NewtonEulerJointFrame:
             state.transforms.append(T_i_im1)
 
             # Adjoint of transform
-            Ad_T = adjoint(T_i_im1)
+            Ad_T = SE3.adjoint(T_i_im1)
 
             # V_i = [Ad_{T_{i,i-1}}] * V_{i-1} + A_i * θ̇_i
             V_i = Ad_T @ V_prev + A_i * dtheta_i
             state.twists.append(V_i)
 
             # V̇_i = [Ad_{T_{i,i-1}}] * V̇_{i-1} + [ad_{V_i}] * A_i * θ̇_i + A_i * θ̈_i
-            ad_V_i = ad(V_i)
+            ad_V_i = SE3.adjoint_algebra(SE3.wedge(V_i))
             Vdot_i = Ad_T @ Vdot_prev + ad_V_i @ A_i * dtheta_i + A_i * ddtheta_i
             state.twist_dots.append(Vdot_i)
 
@@ -308,7 +303,7 @@ class NewtonEulerJointFrame:
                 # T_{i+1,i} from current state (which has T_{i,i-1} for each i)
                 # state.transforms[i+1] = T_{i+1,i}
                 T_ip1_i = state.transforms[i + 1]
-                Ad_T_ip1_i = adjoint(T_ip1_i)
+                Ad_T_ip1_i = SE3.adjoint(T_ip1_i)
                 F_propagated = Ad_T_ip1_i.T @ F_next
             else:
                 # For link 6, F_tip is already in tool0 = frame 6 coordinates
@@ -319,7 +314,7 @@ class NewtonEulerJointFrame:
             F_inertia = G_i @ Vdot_i
 
             # Coriolis/centrifugal wrench
-            ad_V_i_T = ad_transpose(V_i)
+            ad_V_i_T = SE3.adjoint_algebra(SE3.wedge(V_i)).T
             F_coriolis = ad_V_i_T @ (G_i @ V_i)
 
             F_i = F_propagated + F_inertia - F_coriolis

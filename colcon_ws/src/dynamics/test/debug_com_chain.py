@@ -1,10 +1,11 @@
 """Debug CoM frame chain computation."""
 
 import numpy as np
+from pymlg import SE3
 
 from dynamics.newton_euler import create_ur5e_dynamics
 from dynamics.forward_kinematics import forward_kinematics
-from dynamics.lie_algebra import inverse_transform
+
 
 
 def debug_com_chain():

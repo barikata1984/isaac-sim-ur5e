@@ -1,25 +1,12 @@
-"""Unit tests for Lie algebra module."""
+"""Unit tests for pymlg-based Lie algebra operations.
+
+Tests that pymlg SE3/SO3 methods work correctly for dynamics calculations.
+"""
 
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-
-from dynamics.lie_algebra import (
-    skew,
-    unskew,
-    se3_wedge,
-    se3_vee,
-    ad,
-    ad_transpose,
-    adjoint,
-    adjoint_transpose,
-    se3_exp,
-    se3_log,
-    inverse_transform,
-    rotation_from_transform,
-    translation_from_transform,
-    transform_from_rotation_translation,
-)
+from pymlg import SE3, SO3
 
 
 class TestSkew:
@@ -28,7 +15,7 @@ class TestSkew:
     def test_skew_basic(self) -> None:
         """Test skew matrix construction."""
         v = np.array([1.0, 2.0, 3.0])
-        S = skew(v)
+        S = SO3.wedge(v)
 
         expected = np.array([
             [0, -3, 2],
@@ -40,14 +27,14 @@ class TestSkew:
     def test_skew_antisymmetric(self) -> None:
         """Test that skew matrix is antisymmetric."""
         v = np.array([1.0, 2.0, 3.0])
-        S = skew(v)
+        S = SO3.wedge(v)
         assert_allclose(S, -S.T)
 
-    def test_unskew(self) -> None:
-        """Test unskew recovers original vector."""
+    def test_wedge_vee_inverse(self) -> None:
+        """Test wedge and vee are inverses."""
         v = np.array([1.0, 2.0, 3.0])
-        S = skew(v)
-        v_recovered = unskew(S)
+        S = SO3.wedge(v)
+        v_recovered = SO3.vee(S).flatten()
         assert_allclose(v_recovered, v)
 
 
@@ -57,46 +44,31 @@ class TestSE3Operations:
     def test_se3_wedge_vee_inverse(self) -> None:
         """Test that wedge and vee are inverses."""
         twist = np.array([0.1, 0.2, 0.3, 1.0, 2.0, 3.0])
-        xi_hat = se3_wedge(twist)
-        twist_recovered = se3_vee(xi_hat)
+        xi_hat = SE3.wedge(twist)
+        twist_recovered = SE3.vee(xi_hat).flatten()
         assert_allclose(twist_recovered, twist)
-
-    def test_se3_wedge_structure(self) -> None:
-        """Test structure of se(3) matrix."""
-        omega = np.array([0.1, 0.2, 0.3])
-        v = np.array([1.0, 2.0, 3.0])
-        twist = np.concatenate([omega, v])
-
-        xi_hat = se3_wedge(twist)
-
-        # Check structure: [[omega_hat, v], [0, 0]]
-        assert xi_hat.shape == (4, 4)
-        assert_allclose(xi_hat[:3, :3], skew(omega))
-        assert_allclose(xi_hat[:3, 3], v)
-        assert_allclose(xi_hat[3, :], 0)
 
     def test_se3_exp_identity(self) -> None:
         """Test exponential of zero is identity."""
         twist = np.zeros(6)
-        T = se3_exp(twist)
+        T = SE3.Exp(twist)
         assert_allclose(T, np.eye(4), atol=1e-10)
 
     def test_se3_exp_pure_translation(self) -> None:
         """Test exponential for pure translation."""
         v = np.array([1.0, 2.0, 3.0])
         twist = np.concatenate([np.zeros(3), v])
-        T = se3_exp(twist, theta=1.0)
+        T = SE3.Exp(twist)
 
         assert_allclose(T[:3, :3], np.eye(3), atol=1e-10)
         assert_allclose(T[:3, 3], v, atol=1e-10)
 
     def test_se3_exp_pure_rotation_z(self) -> None:
         """Test exponential for pure rotation about z-axis."""
-        omega = np.array([0, 0, 1])
+        omega = np.array([0, 0, np.pi / 2])
         twist = np.concatenate([omega, np.zeros(3)])
-        theta = np.pi / 2
 
-        T = se3_exp(twist, theta)
+        T = SE3.Exp(twist)
 
         # 90 degree rotation about z
         expected_R = np.array([
@@ -113,8 +85,8 @@ class TestSE3Operations:
         v = np.array([1.0, 2.0, 3.0])
         twist = np.concatenate([omega, v])
 
-        T = se3_exp(twist)
-        twist_recovered = se3_log(T)
+        T = SE3.Exp(twist)
+        twist_recovered = SE3.Log(T).flatten()
         assert_allclose(twist_recovered, twist, atol=1e-10)
 
 
@@ -124,7 +96,7 @@ class TestAdjoint:
     def test_adjoint_identity(self) -> None:
         """Test Adjoint of identity transform."""
         T = np.eye(4)
-        Ad_T = adjoint(T)
+        Ad_T = SE3.adjoint(T)
         assert_allclose(Ad_T, np.eye(6))
 
     def test_adjoint_pure_rotation(self) -> None:
@@ -135,24 +107,13 @@ class TestAdjoint:
             [np.sin(theta), np.cos(theta), 0],
             [0, 0, 1]
         ])
-        T = transform_from_rotation_translation(R, np.zeros(3))
-        Ad_T = adjoint(T)
+        T = SE3.from_components(R, np.zeros(3))
+        Ad_T = SE3.adjoint(T)
 
         # For pure rotation: Ad = [[R, 0], [0, R]]
         assert_allclose(Ad_T[:3, :3], R)
         assert_allclose(Ad_T[3:, 3:], R)
         assert_allclose(Ad_T[:3, 3:], np.zeros((3, 3)), atol=1e-10)
-
-    def test_adjoint_transpose(self) -> None:
-        """Test Adjoint transpose."""
-        R = np.eye(3)
-        p = np.array([1.0, 2.0, 3.0])
-        T = transform_from_rotation_translation(R, p)
-
-        Ad_T = adjoint(T)
-        Ad_T_transpose = adjoint_transpose(T)
-
-        assert_allclose(Ad_T_transpose, Ad_T.T)
 
 
 class TestAd:
@@ -161,7 +122,7 @@ class TestAd:
     def test_ad_zero_twist(self) -> None:
         """Test ad of zero twist is zero matrix."""
         twist = np.zeros(6)
-        ad_V = ad(twist)
+        ad_V = SE3.adjoint_algebra(SE3.wedge(twist))
         assert_allclose(ad_V, np.zeros((6, 6)))
 
     def test_ad_structure(self) -> None:
@@ -170,23 +131,16 @@ class TestAd:
         v = np.array([1.0, 2.0, 3.0])
         twist = np.concatenate([omega, v])
 
-        ad_V = ad(twist)
+        ad_V = SE3.adjoint_algebra(SE3.wedge(twist))
 
         # ad_V = [[[omega], 0], [[v], [omega]]]
-        omega_hat = skew(omega)
-        v_hat = skew(v)
+        omega_hat = SO3.wedge(omega)
+        v_hat = SO3.wedge(v)
 
         assert_allclose(ad_V[:3, :3], omega_hat)
         assert_allclose(ad_V[:3, 3:], np.zeros((3, 3)), atol=1e-10)
         assert_allclose(ad_V[3:, :3], v_hat)
         assert_allclose(ad_V[3:, 3:], omega_hat)
-
-    def test_ad_transpose(self) -> None:
-        """Test ad transpose."""
-        twist = np.array([0.1, 0.2, 0.3, 1.0, 2.0, 3.0])
-        ad_V = ad(twist)
-        ad_V_T = ad_transpose(twist)
-        assert_allclose(ad_V_T, ad_V.T)
 
 
 class TestTransformUtilities:
@@ -195,7 +149,7 @@ class TestTransformUtilities:
     def test_inverse_transform_identity(self) -> None:
         """Test inverse of identity is identity."""
         T = np.eye(4)
-        T_inv = inverse_transform(T)
+        T_inv = SE3.inverse(T)
         assert_allclose(T_inv, np.eye(4))
 
     def test_inverse_transform_product(self) -> None:
@@ -206,25 +160,9 @@ class TestTransformUtilities:
             [0, 0, 1]
         ], dtype=np.float64)
         p = np.array([1.0, 2.0, 3.0])
-        T = transform_from_rotation_translation(R, p)
+        T = SE3.from_components(R, p)
 
-        T_inv = inverse_transform(T)
+        T_inv = SE3.inverse(T)
         product = T @ T_inv
 
         assert_allclose(product, np.eye(4), atol=1e-10)
-
-    def test_rotation_translation_extraction(self) -> None:
-        """Test extraction of R and p from T."""
-        R = np.array([
-            [0, -1, 0],
-            [1, 0, 0],
-            [0, 0, 1]
-        ], dtype=np.float64)
-        p = np.array([1.0, 2.0, 3.0])
-        T = transform_from_rotation_translation(R, p)
-
-        R_extracted = rotation_from_transform(T)
-        p_extracted = translation_from_transform(T)
-
-        assert_allclose(R_extracted, R)
-        assert_allclose(p_extracted, p)

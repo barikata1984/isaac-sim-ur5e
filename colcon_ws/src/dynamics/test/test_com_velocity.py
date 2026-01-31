@@ -58,7 +58,7 @@ def test_com_based_tool0_velocity():
     print(f"  Overall: {'ALL TESTS PASSED' if all_pass else 'SOME TESTS FAILED'}")
     print("="*80)
 
-    return all_pass
+    assert all_pass, "Some tests failed"
 
 
 def test_com_based_tool0_acceleration():
@@ -87,7 +87,7 @@ def test_com_based_tool0_acceleration():
 
     print("\n" + "="*80)
 
-    return error < 1e-6
+    assert error < 1e-6, f"Acceleration error {error} exceeds threshold"
 
 
 if __name__ == "__main__":

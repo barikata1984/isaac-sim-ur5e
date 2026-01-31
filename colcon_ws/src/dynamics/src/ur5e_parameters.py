@@ -11,13 +11,9 @@ from dataclasses import dataclass, field
 from typing import List, Tuple
 
 import numpy as np
+from pymlg import SE3
 
 from dynamics.spatial_inertia import SpatialInertia
-from dynamics.lie_algebra import (
-    se3_exp,
-    transform_from_rotation_translation,
-    inverse_transform,
-)
 
 
 @dataclass
@@ -182,15 +178,14 @@ class UR5eParameters:
                     [0, np.sin(alpha1), np.cos(alpha1)],
                 ])
                 p_joint = np.array([0, 0, d1])
-                T_joint = transform_from_rotation_translation(R_x_alpha, p_joint)
+                T_joint = SE3.from_components(R_x_alpha, p_joint)
 
-                # Offset from joint to CoM
                 com_offset = self.link_com_positions[i]
-                T_com = transform_from_rotation_translation(np.eye(3), com_offset)
+                T_com = SE3.from_components(np.eye(3), com_offset)
 
                 # M_{1,0} = T_com^{-1} @ T_joint (transform from base to CoM1)
                 # But we want {i-1} in {i}, so T_{i,i-1}
-                M = inverse_transform(T_com @ inverse_transform(T_joint))
+                M = SE3.inverse(T_com @ SE3.inverse(T_joint))
             else:
                 # For subsequent links, use DH parameters to compute transforms
                 a_im1 = self.dh_params[i - 1, 0]
@@ -215,7 +210,7 @@ class UR5eParameters:
                 ])
 
                 p = np.array([a_im1, -sa * d_i, ca * d_i])
-                T_joint_to_joint = transform_from_rotation_translation(R_x, p)
+                T_joint_to_joint = SE3.from_components(R_x, p)
 
                 # CoM offsets
                 com_prev = self.link_com_positions[i - 1]
@@ -223,13 +218,13 @@ class UR5eParameters:
 
                 # T from previous CoM to current CoM
                 # T_{com_i, com_{i-1}} = T_{com_i, j_i} @ T_{j_i, j_{i-1}} @ T_{j_{i-1}, com_{i-1}}
-                T_com_prev_to_joint_prev = transform_from_rotation_translation(np.eye(3), -com_prev)
-                T_joint_curr_to_com_curr = transform_from_rotation_translation(np.eye(3), com_curr)
+                T_com_prev_to_joint_prev = SE3.from_components(np.eye(3), -com_prev)
+                T_joint_curr_to_com_curr = SE3.from_components(np.eye(3), com_curr)
 
                 T_com_curr_from_com_prev = T_joint_curr_to_com_curr @ T_joint_to_joint @ T_com_prev_to_joint_prev
 
                 # M_{i,i-1} transforms from {i-1} to {i}
-                M = inverse_transform(T_com_curr_from_com_prev)
+                M = SE3.inverse(T_com_curr_from_com_prev)
 
             M_list.append(M)
 
@@ -250,7 +245,7 @@ class UR5eParameters:
         # CoM is offset from joint
         p_ee = np.array([0, 0, d6]) - com6
 
-        return transform_from_rotation_translation(np.eye(3), p_ee)
+        return SE3.from_components(np.eye(3), p_ee)
 
 
 def create_ur5e_parameters() -> UR5eParameters:

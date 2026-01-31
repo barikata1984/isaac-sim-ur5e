@@ -4,6 +4,7 @@ Verifies that the velocity calculation matches the geometric Jacobian.
 """
 
 import numpy as np
+from pymlg import SE3
 
 from dynamics.newton_euler_joint_frame import create_ur5e_joint_frame_dynamics
 from dynamics.newton_euler import create_ur5e_dynamics
@@ -13,7 +14,7 @@ from dynamics.forward_kinematics import (
     forward_kinematics,
     forward_kinematics_all_frames,
 )
-from dynamics.lie_algebra import inverse_transform
+
 
 
 def test_frame_positions():
@@ -38,9 +39,8 @@ def test_frame_positions():
     print("  " + "-"*100)
 
     for i in range(6):
-        # T_{i,i-1} is from frame i-1 to frame i
         # To get T_{0,i}, we need to invert and chain
-        T_inv = inverse_transform(state.transforms[i])
+        T_inv = SE3.inverse(state.transforms[i])
         T_base = T_base @ T_inv
 
         p_dh = dh_frames[i][:3, 3]
@@ -74,7 +74,7 @@ def test_rotation_consistency():
     state = dynamics._forward_iterations(q, np.zeros(6), np.zeros(6))
     T_base = np.eye(4)
     for T_i in state.transforms:
-        T_inv = inverse_transform(T_i)
+        T_inv = SE3.inverse(T_i)
         T_base = T_base @ T_inv
     R_ne = T_base[:3, :3]
 

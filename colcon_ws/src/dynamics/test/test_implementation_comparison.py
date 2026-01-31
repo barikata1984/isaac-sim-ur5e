@@ -265,11 +265,11 @@ class TestTwistVsClassic:
 
 
 class TestLieAlgebraNativeVsPymlg:
-    """Compare native and pymlg Lie algebra implementations."""
+    """Compare pymlg SE3/SO3 and native Lie algebra implementations."""
 
     def test_se3_exp(self) -> None:
         """Test SE(3) exponential map."""
-        from dynamics.lie_algebra import se3_exp as se3_exp_pymlg
+        from pymlg import SE3
         from dynamics.lie_algebra_native import se3_exp as se3_exp_native
 
         twists = [
@@ -282,7 +282,7 @@ class TestLieAlgebraNativeVsPymlg:
 
         for twist in twists:
             for theta in thetas:
-                T_pymlg = se3_exp_pymlg(twist, theta)
+                T_pymlg = SE3.Exp(twist * theta)
                 T_native = se3_exp_native(twist, theta)
                 assert_allclose(
                     T_pymlg, T_native, rtol=1e-10, atol=1e-10,
@@ -291,7 +291,7 @@ class TestLieAlgebraNativeVsPymlg:
 
     def test_adjoint(self) -> None:
         """Test Adjoint representation."""
-        from dynamics.lie_algebra import adjoint as adjoint_pymlg
+        from pymlg import SE3
         from dynamics.lie_algebra_native import adjoint as adjoint_native
 
         transforms = [
@@ -305,7 +305,7 @@ class TestLieAlgebraNativeVsPymlg:
         ]
 
         for T in transforms:
-            Ad_pymlg = adjoint_pymlg(T)
+            Ad_pymlg = SE3.adjoint(T)
             Ad_native = adjoint_native(T)
             assert_allclose(
                 Ad_pymlg, Ad_native, rtol=1e-10, atol=1e-10,
@@ -314,7 +314,7 @@ class TestLieAlgebraNativeVsPymlg:
 
     def test_ad(self) -> None:
         """Test ad (Lie bracket) operator."""
-        from dynamics.lie_algebra import ad as ad_pymlg
+        from pymlg import SE3
         from dynamics.lie_algebra_native import ad as ad_native
 
         twists = [
@@ -324,7 +324,7 @@ class TestLieAlgebraNativeVsPymlg:
         ]
 
         for twist in twists:
-            ad_pymlg_result = ad_pymlg(twist)
+            ad_pymlg_result = SE3.adjoint_algebra(SE3.wedge(twist))
             ad_native_result = ad_native(twist)
             assert_allclose(
                 ad_pymlg_result, ad_native_result, rtol=1e-10, atol=1e-10,

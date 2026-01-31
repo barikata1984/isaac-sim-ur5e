@@ -6,15 +6,19 @@ frame is correctly applied.
 
 import numpy as np
 import pytest
+from pymlg import SE3
 
 from dynamics.newton_euler import create_ur5e_dynamics
 from dynamics.ur5e_parameters import UR5eParameters
-from dynamics.lie_algebra import adjoint, inverse_transform
 from dynamics.forward_kinematics import (
     compute_tool0_twist_base,
     compute_tool0_twist_tool,
     forward_kinematics,
 )
+
+
+
+
 
 
 def test_adjoint_transformation_direction():
@@ -60,10 +64,10 @@ def test_adjoint_transformation_direction():
         T_CoM6_tool0 = dynamics._ee_frame
 
         # Alternative: use inverse transform
-        T_tool0_CoM6 = inverse_transform(T_CoM6_tool0)
+        T_tool0_CoM6 = SE3.inverse(T_CoM6_tool0)
 
-        Ad_current = adjoint(T_CoM6_tool0)
-        Ad_inverse = adjoint(T_tool0_CoM6)
+        Ad_current = SE3.adjoint(T_CoM6_tool0)
+        Ad_inverse = SE3.adjoint(T_tool0_CoM6)
 
         V_with_current = Ad_current @ V_n
         V_with_inverse = Ad_inverse @ V_n

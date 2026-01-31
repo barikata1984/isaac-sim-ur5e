@@ -8,15 +8,10 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import numpy as np
+from pymlg import SE3
 
-from dynamics.lie_algebra import (
-    ad,
-    ad_transpose,
-    adjoint,
-    adjoint_transpose,
-    se3_exp,
-)
 from dynamics.ur5e_parameters import UR5eParameters
+
 
 
 @dataclass
@@ -123,12 +118,12 @@ class NewtonEulerDynamics:
 
             # Equation 8.50: T_{i,i-1} = exp(-[A_i]θ_i) * M_{i,i-1}
             # Transform from frame {i-1} to frame {i}
-            T_exp = se3_exp(-A_i, theta_i)
+            T_exp = SE3.Exp(-A_i * theta_i)
             T_i_im1 = T_exp @ M_i
             state.transforms.append(T_i_im1)
 
             # Adjoint of transform
-            Ad_T = adjoint(T_i_im1)
+            Ad_T = SE3.adjoint(T_i_im1)
 
             # Equation 8.51: V_i = [Ad_{T_{i,i-1}}] * V_{i-1} + A_i * θ̇_i
             V_i = Ad_T @ V_prev + A_i * dtheta_i
@@ -136,7 +131,7 @@ class NewtonEulerDynamics:
 
             # Equation 8.52: V̇_i = [Ad_{T_{i,i-1}}] * V̇_{i-1}
             #                     + [ad_{V_i}] * A_i * θ̇_i + A_i * θ̈_i
-            ad_V_i = ad(V_i)
+            ad_V_i = SE3.adjoint_algebra(SE3.wedge(V_i))
             Vdot_i = Ad_T @ Vdot_prev + ad_V_i @ A_i * dtheta_i + A_i * ddtheta_i
             state.twist_dots.append(Vdot_i)
 
@@ -179,7 +174,7 @@ class NewtonEulerDynamics:
             F_next = np.asarray(F_tip, dtype=np.float64).flatten()
             # Transform external wrench from tool frame to link n frame
             # F_n = [Ad_{T_{n+1,n}}]^T * F_tip
-            Ad_T_ee = adjoint(self._ee_frame)
+            Ad_T_ee = SE3.adjoint(self._ee_frame)
             F_next = Ad_T_ee.T @ F_next
 
         # Initialize wrenches list
@@ -196,7 +191,7 @@ class NewtonEulerDynamics:
             if i < n - 1:
                 # Get transform from link i to link i+1
                 T_ip1_i = state.transforms[i + 1]
-                Ad_T_ip1_i = adjoint(T_ip1_i)
+                Ad_T_ip1_i = SE3.adjoint(T_ip1_i)
                 F_propagated = Ad_T_ip1_i.T @ F_next
             else:
                 # For last link, F_next is already the end-effector wrench
@@ -206,7 +201,7 @@ class NewtonEulerDynamics:
             F_inertia = G_i @ Vdot_i
 
             # Coriolis/centrifugal wrench
-            ad_V_i_T = ad_transpose(V_i)
+            ad_V_i_T = SE3.adjoint_algebra(SE3.wedge(V_i)).T
             F_coriolis = ad_V_i_T @ (G_i @ V_i)
 
             F_i = F_propagated + F_inertia - F_coriolis
@@ -338,7 +333,7 @@ class NewtonEulerDynamics:
         V_n = state.twists[-1]
 
         # Transform to end-effector frame
-        Ad_T_ee = adjoint(self._ee_frame)
+        Ad_T_ee = SE3.adjoint(self._ee_frame)
         V_ee = Ad_T_ee @ V_n
 
         return V_ee
@@ -397,7 +392,7 @@ class NewtonEulerDynamics:
         Vdot_n = state.twist_dots[-1]
 
         # Transform to end-effector frame
-        Ad_T_ee = adjoint(self._ee_frame)
+        Ad_T_ee = SE3.adjoint(self._ee_frame)
         Vdot_ee = Ad_T_ee @ Vdot_n
 
         return Vdot_ee

@@ -2,19 +2,16 @@
 
 This package implements the twist-wrench formulation of Newton-Euler
 inverse dynamics based on Lynch and Park (2017) Chapter 8.
+
+The package uses pymlg directly for Lie group operations (SE3, SO3).
 """
 
 from dynamics.spatial_inertia import SpatialInertia
-from dynamics.lie_algebra import ad, ad_transpose, adjoint, adjoint_transpose
 from dynamics.newton_euler import NewtonEulerDynamics
 from dynamics.ur5e_parameters import UR5eParameters
 
 __all__ = [
     'SpatialInertia',
-    'ad',
-    'ad_transpose',
-    'adjoint',
-    'adjoint_transpose',
     'NewtonEulerDynamics',
     'UR5eParameters',
 ]
