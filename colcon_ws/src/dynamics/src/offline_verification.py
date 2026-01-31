@@ -15,13 +15,7 @@ import numpy as np
 
 from dynamics.newton_euler import NewtonEulerDynamics, create_ur5e_dynamics
 from dynamics.newton_euler_native import NewtonEulerNative, create_ur5e_native_dynamics
-from dynamics.lie_algebra import (
-    adjoint,
-    rotation_from_transform,
-    transform_from_rotation_translation,
-    se3_exp,
-)
-from dynamics.ur5e_parameters import UR5eParameters
+from dynamics.forward_kinematics import forward_kinematics
 
 
 @dataclass
@@ -64,139 +58,6 @@ def load_trajectory(json_path: str) -> Tuple[List[TrajectoryFrame], float]:
     return frames, fps
 
 
-def compute_forward_kinematics_dh(
-    params: UR5eParameters,
-    q: np.ndarray,
-) -> np.ndarray:
-    """Compute forward kinematics using standard DH parameters.
-
-    Uses Modified DH convention (Craig) to compute transformation
-    from base frame to tool0 frame.
-
-    Args:
-        params: Robot parameters.
-        q: Joint positions [rad] (6,).
-
-    Returns:
-        T_base_tool0: (4, 4) transformation matrix of tool0 in base frame.
-    """
-    T = np.eye(4)
-    dh = params.dh_params
-
-    for i in range(params.n_joints):
-        theta = q[i]
-
-        if i == 0:
-            # First joint: use alpha from row 0, d from row 0
-            a = dh[0, 0]      # 0
-            d = dh[0, 1]      # 0.089159
-            alpha = dh[0, 2]  # pi/2
-        else:
-            # Modified DH: use a, alpha from previous row, d from current row
-            a = dh[i - 1, 0]
-            alpha = dh[i - 1, 2]
-            d = dh[i, 1]
-
-        # Modified DH transformation matrix
-        ct = np.cos(theta)
-        st = np.sin(theta)
-        ca = np.cos(alpha)
-        sa = np.sin(alpha)
-
-        if i == 0:
-            # For first joint, the standard form is:
-            # Rz(theta) * Tz(d) * Tx(a) * Rx(alpha)
-            T_i = np.array([
-                [ct, -st * ca, st * sa, a * ct],
-                [st, ct * ca, -ct * sa, a * st],
-                [0, sa, ca, d],
-                [0, 0, 0, 1]
-            ], dtype=np.float64)
-        else:
-            # Standard Modified DH
-            T_i = np.array([
-                [ct, -st, 0, a],
-                [st * ca, ct * ca, -sa, -d * sa],
-                [st * sa, ct * sa, ca, d * ca],
-                [0, 0, 0, 1]
-            ], dtype=np.float64)
-
-        T = T @ T_i
-
-    return T
-
-
-def compute_forward_kinematics(
-    params: UR5eParameters,
-    q: np.ndarray,
-) -> np.ndarray:
-    """Compute forward kinematics to get tool0 pose.
-
-    This function uses the standard UR5e DH parameters to compute
-    forward kinematics, which is independent of the Newton-Euler
-    CoM frame convention.
-
-    Args:
-        params: Robot parameters.
-        q: Joint positions [rad] (6,).
-
-    Returns:
-        T_base_tool0: (4, 4) transformation matrix of tool0 in base frame.
-    """
-    # UR5e standard DH parameters (from Universal Robots documentation)
-    # Using Modified DH convention
-    # | i | a_{i-1} | d_i      | alpha_{i-1} |
-    # |---|---------|----------|-------------|
-    # | 1 | 0       | 0.089159 | 0           |
-    # | 2 | 0       | 0        | pi/2        |
-    # | 3 | -0.425  | 0        | 0           |
-    # | 4 | -0.392  | 0        | 0           |
-    # | 5 | 0       | 0.10915  | pi/2        |
-    # | 6 | 0       | 0.09465  | -pi/2       |
-    # | 7 | 0       | 0.0823   | 0           |  (tool0)
-
-    # Standard UR5e DH parameters (different ordering than params.dh_params)
-    # Format: [a_{i-1}, d_i, alpha_{i-1}]
-    dh_standard = np.array([
-        [0,       0.089159,  0],          # Joint 1
-        [0,       0,         np.pi/2],    # Joint 2
-        [-0.425,  0,         0],          # Joint 3
-        [-0.392,  0,         0],          # Joint 4
-        [0,       0.10915,   np.pi/2],    # Joint 5
-        [0,       0.09465,  -np.pi/2],    # Joint 6
-    ])
-
-    T = np.eye(4)
-
-    for i in range(6):
-        a = dh_standard[i, 0]
-        d = dh_standard[i, 1]
-        alpha = dh_standard[i, 2]
-        theta = q[i]
-
-        ct = np.cos(theta)
-        st = np.sin(theta)
-        ca = np.cos(alpha)
-        sa = np.sin(alpha)
-
-        # Modified DH transformation
-        T_i = np.array([
-            [ct, -st, 0, a],
-            [st * ca, ct * ca, -sa, -d * sa],
-            [st * sa, ct * sa, ca, d * ca],
-            [0, 0, 0, 1]
-        ], dtype=np.float64)
-
-        T = T @ T_i
-
-    # Apply tool0 offset (d7 = 0.0823)
-    T_tool = np.eye(4)
-    T_tool[2, 3] = 0.0823
-    T = T @ T_tool
-
-    return T
-
-
 def verify_twist_transformation(
     dynamics: NewtonEulerDynamics,
     q: np.ndarray,
@@ -222,8 +83,7 @@ def verify_twist_transformation(
     v_tool0 = V_tool0[3:]      # Linear velocity of tool0 origin in tool0 frame
 
     # Get forward kinematics
-    params = dynamics.params
-    T_base_tool0 = compute_forward_kinematics(params, q)
+    T_base_tool0 = forward_kinematics(q)
     R_base_tool0 = T_base_tool0[:3, :3]
 
     # Transform to base frame for comparison
@@ -260,16 +120,14 @@ def numerical_differentiation_check(
     Returns:
         Dictionary with comparison results.
     """
-    params = dynamics.params
-
     # Current pose
-    T0 = compute_forward_kinematics(params, q)
+    T0 = forward_kinematics(q)
     p0 = T0[:3, 3]
     R0 = T0[:3, :3]
 
     # Pose after small time step
     q_next = q + dq * dt
-    T1 = compute_forward_kinematics(params, q_next)
+    T1 = forward_kinematics(q_next)
     p1 = T1[:3, 3]
     R1 = T1[:3, :3]
 
@@ -439,8 +297,8 @@ def run_comprehensive_verification() -> dict:
             q_minus = q.copy()
             q_minus[j] -= eps
 
-            T_plus = compute_forward_kinematics(dynamics.params, q_plus)
-            T_minus = compute_forward_kinematics(dynamics.params, q_minus)
+            T_plus = forward_kinematics(q_plus)
+            T_minus = forward_kinematics(q_minus)
 
             # Position part
             J[3:, j] = (T_plus[:3, 3] - T_minus[:3, 3]) / (2 * eps)
@@ -460,7 +318,7 @@ def run_comprehensive_verification() -> dict:
 
         # Velocity from dynamics (transform to base)
         V_tool0 = dynamics.get_end_effector_twist(q, dq)
-        T = compute_forward_kinematics(dynamics.params, q)
+        T = forward_kinematics(q)
         R = T[:3, :3]
         V_dynamics_base = np.concatenate([R @ V_tool0[:3], R @ V_tool0[3:]])
 

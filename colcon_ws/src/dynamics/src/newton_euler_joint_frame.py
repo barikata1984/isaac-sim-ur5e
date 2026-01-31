@@ -16,14 +16,13 @@ from dynamics.lie_algebra import (
     ad_transpose,
     adjoint,
     inverse_transform,
-    transform_from_rotation_translation,
+    skew,
 )
 from dynamics.forward_kinematics import (
     UR5E_DH_PARAMS,
     dh_transform_standard,
-    forward_kinematics,
-    forward_kinematics_all_frames,
 )
+from dynamics.ur5e_parameters import create_ur5e_parameters
 
 
 @dataclass
@@ -45,38 +44,16 @@ class JointFrameDynamicsState:
     transforms: List[np.ndarray] = field(default_factory=list)
 
 
-# UR5e link masses [kg]
-UR5E_LINK_MASSES = np.array([3.7, 8.393, 2.275, 1.219, 1.219, 0.1879])
-
-# UR5e CoM positions relative to joint frame [m]
-# These are in the joint frame when theta_i = 0
-UR5E_COM_POSITIONS = np.array([
-    [0.0, -0.02561, 0.00193],      # Link 1
-    [-0.2125, 0.0, 0.11336],       # Link 2
-    [-0.15, 0.0, 0.0265],          # Link 3
-    [0.0, -0.0018, 0.01634],       # Link 4
-    [0.0, 0.0018, 0.01634],        # Link 5
-    [0.0, 0.0, -0.001159],         # Link 6
-])
-
-# UR5e link inertia tensors [kg*m^2] at CoM
-UR5E_LINK_INERTIAS = np.array([
-    [[0.010267, 0.0, 0.0], [0.0, 0.010267, 0.0], [0.0, 0.0, 0.00666]],
-    [[0.22689, 0.0, 0.0], [0.0, 0.22689, 0.0], [0.0, 0.0, 0.0151074]],
-    [[0.049443, 0.0, 0.0], [0.0, 0.049443, 0.0], [0.0, 0.0, 0.004095]],
-    [[0.111172, 0.0, 0.0], [0.0, 0.111172, 0.0], [0.0, 0.0, 0.21942]],
-    [[0.111172, 0.0, 0.0], [0.0, 0.111172, 0.0], [0.0, 0.0, 0.21942]],
-    [[0.0171364, 0.0, 0.0], [0.0, 0.0171364, 0.0], [0.0, 0.0, 0.033822]],
-])
+# Singleton instance of UR5e parameters (loaded once)
+_ur5e_params = None
 
 
-def skew(v: np.ndarray) -> np.ndarray:
-    """Create skew-symmetric matrix from 3-vector."""
-    return np.array([
-        [0, -v[2], v[1]],
-        [v[2], 0, -v[0]],
-        [-v[1], v[0], 0]
-    ])
+def _get_ur5e_params():
+    """Get cached UR5e parameters instance."""
+    global _ur5e_params
+    if _ur5e_params is None:
+        _ur5e_params = create_ur5e_parameters()
+    return _ur5e_params
 
 
 def compute_spatial_inertia_at_joint(
@@ -147,12 +124,13 @@ class NewtonEulerJointFrame:
             self.gravity = np.asarray(gravity, dtype=np.float64).flatten()
 
         # Pre-compute spatial inertia matrices at joint frames
+        params = _get_ur5e_params()
         self.spatial_inertias = []
         for i in range(6):
             G = compute_spatial_inertia_at_joint(
-                mass=UR5E_LINK_MASSES[i],
-                com_position=UR5E_COM_POSITIONS[i],
-                inertia_at_com=UR5E_LINK_INERTIAS[i],
+                mass=params.link_masses[i],
+                com_position=params.link_com_positions[i],
+                inertia_at_com=params.link_inertias[i],
             )
             self.spatial_inertias.append(G)
 

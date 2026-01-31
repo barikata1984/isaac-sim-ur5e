@@ -5,7 +5,7 @@ import tty
 import termios
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, Bool
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -18,8 +18,9 @@ class TrajectoryFollower(Node):
         self.declare_parameter('loop', False)
         self.declare_parameter('auto_start', False)
         
-        # Publisher
+        # Publishers
         self.publisher_ = self.create_publisher(Float64MultiArray, 'joint_commands', 10)
+        self.complete_pub = self.create_publisher(Bool, 'trajectory_complete', 10)
         
         # Load JSON
         json_path = self.get_parameter('json_path').get_parameter_value().string_value
@@ -131,6 +132,11 @@ class TrajectoryFollower(Node):
             self.get_logger().info("Looping trajectory")
         else:
             self.get_logger().info("Trajectory finished")
+            # Publish trajectory complete signal
+            complete_msg = Bool()
+            complete_msg.data = True
+            self.complete_pub.publish(complete_msg)
+            self.get_logger().info("Published trajectory_complete signal")
             self.timer.cancel()
             self.active = False
 

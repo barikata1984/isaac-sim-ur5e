@@ -1,6 +1,14 @@
 #!/bin/bash
 # Wrapper script for Isaac Sim GUI with ROS 2 integration
 
+# Parse headless parameter from ROS 2 arguments
+for arg in "$@"; do
+    if [[ "$arg" == "headless:=true" ]] || [[ "$arg" == "headless:=True" ]] || [[ "$arg" == "headless:=1" ]]; then
+        export ISAAC_HEADLESS=true
+        echo "[isaac_sim_gui.sh] Headless mode enabled"
+    fi
+done
+
 # Find the install directory
 # Find the main.py script path using python3 (which should be aware of the package path after sourcing setup.bash)
 NODE_SCRIPT=$(python3 -c "import core; import os; print(os.path.join(os.path.dirname(core.__file__), 'main.py'))" 2>/dev/null)
