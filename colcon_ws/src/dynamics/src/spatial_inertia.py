@@ -1,142 +1,157 @@
-"""Spatial inertia matrix implementation.
+"""Spatial inertia matrix utilities.
 
-Based on Lynch and Park (2017), Section 8.2.2, Equation 8.32.
+This module provides functions for computing 6x6 spatial inertia matrices
+using pymlg twist convention: [ω, v] (angular velocity, linear velocity).
+
+The spatial inertia matrix relates twists to wrenches:
+    F = G @ V̇ - ad_V^T @ G @ V
+
+where F = [τ, f] is a wrench (torque, force) in [ω, v] convention.
 """
 
-from dataclasses import dataclass
-from typing import Optional
-
 import numpy as np
-from pymlg import SE3
+from pymlg.numpy import SE3, SO3
 
 
-@dataclass
-class SpatialInertia:
-    """Spatial inertia matrix G_b in R^{6x6}.
+def skew(v: np.ndarray) -> np.ndarray:
+    """Convert 3-vector to skew-symmetric matrix."""
+    return SO3.wedge(v)
 
-    The spatial inertia matrix expressed in a body frame {b} at the center
-    of mass is defined as:
 
-        G_b = [[I_b,  0  ],
-               [0,   m*I ]]
+def spatial_inertia_at_com(
+    mass: float,
+    inertia: np.ndarray,
+) -> np.ndarray:
+    """Compute 6x6 spatial inertia matrix at center of mass.
 
-    where:
-        - I_b: 3x3 rotational inertia matrix about the center of mass
-        - m: mass of the body
-        - I: 3x3 identity matrix
+    At the center of mass, the spatial inertia matrix has a simple form
+    with no coupling between linear and angular parts.
 
-    Attributes:
-        I_b: Rotational inertia matrix (3x3) in body frame.
-        mass: Mass of the rigid body.
+    For pymlg convention [ω, v]:
+        G = [[I_c,    0    ],
+             [0,      m*I_3]]
+
+    where I_c is the 3x3 rotational inertia about CoM.
+
+    Args:
+        mass: Link mass [kg].
+        inertia: (3, 3) rotational inertia tensor at CoM [kg*m^2].
+
+    Returns:
+        (6, 6) spatial inertia matrix at CoM.
     """
-
-    I_b: np.ndarray  # (3, 3) rotational inertia matrix
-    mass: float
-
-    def __post_init__(self) -> None:
-        """Validate inputs after initialization."""
-        self.I_b = np.asarray(self.I_b, dtype=np.float64)
-        if self.I_b.shape != (3, 3):
-            raise ValueError(f"I_b must be (3, 3), got {self.I_b.shape}")
-        if self.mass <= 0:
-            raise ValueError(f"mass must be positive, got {self.mass}")
-
-    def to_matrix(self) -> np.ndarray:
-        """Return the 6x6 spatial inertia matrix G_b.
-
-        Returns:
-            G_b: (6, 6) spatial inertia matrix.
-        """
-        G = np.zeros((6, 6), dtype=np.float64)
-        G[:3, :3] = self.I_b
-        G[3:, 3:] = self.mass * np.eye(3)
-        return G
-
-    @classmethod
-    def from_matrix(cls, G: np.ndarray) -> "SpatialInertia":
-        """Create SpatialInertia from a 6x6 matrix.
-
-        Args:
-            G: (6, 6) spatial inertia matrix.
-
-        Returns:
-            SpatialInertia instance.
-        """
-        G = np.asarray(G, dtype=np.float64)
-        if G.shape != (6, 6):
-            raise ValueError(f"G must be (6, 6), got {G.shape}")
-        I_b = G[:3, :3]
-        mass = G[3, 3]  # Assume diagonal form
-        return cls(I_b=I_b, mass=mass)
-
-    def transform(self, T_ba: np.ndarray) -> "SpatialInertia":
-        """Transform spatial inertia to a different frame.
-
-        Based on Equation 8.42:
-            G_a = [Ad_{T_ba}]^T * G_b * [Ad_{T_ba}]
-
-        This is a generalization of Steiner's theorem.
-
-        Args:
-            T_ba: (4, 4) homogeneous transformation from {a} to {b}.
-
-        Returns:
-            Spatial inertia expressed in frame {a}.
-        """
-        Ad_T = SE3.adjoint(T_ba)  # 6x6 adjoint matrix
-        G_b = self.to_matrix()
-        G_a = Ad_T.T @ G_b @ Ad_T
-        return SpatialInertia.from_matrix(G_a)
-
-    @staticmethod
-    def steiner_offset(I_cm: np.ndarray, mass: float, q: np.ndarray) -> np.ndarray:
-        """Apply Steiner's theorem (parallel axis theorem).
-
-        Based on Equation 8.27:
-            I_q = I_b + m * (q^T * q * I - q * q^T)
-
-        where q is the offset from the center of mass.
-
-        Args:
-            I_cm: (3, 3) inertia at center of mass.
-            mass: Mass of the body.
-            q: (3,) offset vector from center of mass to new origin.
-
-        Returns:
-            I_q: (3, 3) inertia about the new origin.
-        """
-        q = np.asarray(q, dtype=np.float64).flatten()
-        I = np.eye(3)
-        return I_cm + mass * (np.dot(q, q) * I - np.outer(q, q))
-
-    def kinetic_energy(self, twist: np.ndarray) -> float:
-        """Compute kinetic energy of the rigid body.
-
-        Based on Equation 8.33:
-            K = (1/2) * V_b^T * G_b * V_b
-
-        Args:
-            twist: (6,) body twist V_b = [omega_b, v_b].
-
-        Returns:
-            Kinetic energy in Joules.
-        """
-        twist = np.asarray(twist, dtype=np.float64).flatten()
-        G = self.to_matrix()
-        return 0.5 * twist @ G @ twist
+    G = np.zeros((6, 6))
+    G[:3, :3] = np.asarray(inertia)
+    G[3:, 3:] = mass * np.eye(3)
+    return G
 
 
-def spatial_momentum(G: np.ndarray, twist: np.ndarray) -> np.ndarray:
-    """Compute spatial momentum.
+def spatial_inertia_at_frame(
+    mass: float,
+    inertia_at_com: np.ndarray,
+    com_position: np.ndarray,
+) -> np.ndarray:
+    """Compute 6x6 spatial inertia matrix at a different frame.
 
-    Based on Equation 8.34:
-        P_b = G_b * V_b = [I_b * omega_b, m * v_b]
+    Transforms the spatial inertia from the CoM to a frame displaced
+    by com_position. Uses the parallel axis theorem for inertia.
+
+    For pymlg convention [ω, v], when the frame is displaced from
+    CoM by vector p (from frame origin to CoM):
+        G = [[I_c + m*[p]×[p]×^T,    m*[p]×   ],
+             [m*[p]×^T,              m*I_3    ]]
+
+    Note: [p]×^T = -[p]×
+
+    Args:
+        mass: Link mass [kg].
+        inertia_at_com: (3, 3) rotational inertia tensor at CoM [kg*m^2].
+        com_position: (3,) position vector from frame origin to CoM [m].
+
+    Returns:
+        (6, 6) spatial inertia matrix at the frame origin.
+    """
+    p = np.asarray(com_position).ravel()
+    p_skew = skew(p)
+
+    G = np.zeros((6, 6))
+
+    # Inertia block (upper-left): I_c + m*[p]×[p]×^T
+    # [p]×[p]×^T = -[p]×[p]× = ||p||^2*I - p*p^T
+    G[:3, :3] = inertia_at_com + mass * (np.dot(p, p) * np.eye(3) - np.outer(p, p))
+
+    # Cross-coupling (upper-right): m*[p]×
+    G[:3, 3:] = mass * p_skew
+
+    # Cross-coupling (lower-left): m*[p]×^T = -m*[p]×
+    G[3:, :3] = -mass * p_skew
+
+    # Mass block (lower-right): m*I_3
+    G[3:, 3:] = mass * np.eye(3)
+
+    return G
+
+
+def _adjoint_se3_inv(T: np.ndarray) -> np.ndarray:
+    """Compute adjoint of inverse transformation Ad_{T^{-1}}.
+
+    Uses pymlg SE3.adjoint with [ω, v] convention.
+
+    Args:
+        T: (4, 4) homogeneous transformation matrix.
+
+    Returns:
+        (6, 6) adjoint matrix of inverse transformation.
+    """
+    T_inv = SE3.inverse(T)
+    return SE3.adjoint(T_inv)
+
+
+def transform_spatial_inertia(
+    G: np.ndarray,
+    T: np.ndarray,
+) -> np.ndarray:
+    """Transform spatial inertia matrix to a new frame.
+
+    If G_a is the spatial inertia in frame A, and T_ba is the
+    transformation from A to B, then:
+        G_b = Ad_{T_ba}^{-T} @ G_a @ Ad_{T_ba}^{-1}
+
+    Uses pymlg convention [ω, v].
+
+    Args:
+        G: (6, 6) spatial inertia matrix in frame A.
+        T: (4, 4) transformation from frame A to frame B.
+
+    Returns:
+        (6, 6) spatial inertia matrix in frame B.
+    """
+    Ad_inv = _adjoint_se3_inv(T)
+    return Ad_inv.T @ G @ Ad_inv
+
+
+def is_positive_definite(G: np.ndarray, tol: float = 1e-10) -> bool:
+    """Check if spatial inertia matrix is positive definite.
 
     Args:
         G: (6, 6) spatial inertia matrix.
-        twist: (6,) body twist.
+        tol: Tolerance for eigenvalue check.
 
     Returns:
-        P_b: (6,) spatial momentum.
+        True if all eigenvalues are positive.
     """
-    return G @ twist
+    eigenvalues = np.linalg.eigvalsh(G)
+    return np.all(eigenvalues > tol)
+
+
+def is_symmetric(G: np.ndarray, tol: float = 1e-10) -> bool:
+    """Check if spatial inertia matrix is symmetric.
+
+    Args:
+        G: (6, 6) spatial inertia matrix.
+        tol: Tolerance for symmetry check.
+
+    Returns:
+        True if G is symmetric within tolerance.
+    """
+    return np.allclose(G, G.T, atol=tol)

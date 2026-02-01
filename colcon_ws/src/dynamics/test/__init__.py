@@ -1,1 +1,1 @@
-"""Unit tests for dynamics package."""
+"""Tests for dynamics package."""

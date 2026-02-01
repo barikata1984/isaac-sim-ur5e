@@ -1,8 +1,6 @@
-"""Setup script for UR robot package."""
+from setuptools import setup, find_packages
 
-from setuptools import setup
-
-package_name = 'ur'
+package_name = 'kinematics'
 
 setup(
     name=package_name,
@@ -10,17 +8,15 @@ setup(
     packages=[package_name],
     package_dir={package_name: 'src'},
     data_files=[
-        (
-            'share/ament_index/resource_index/packages',
-            ['resource/' + package_name]
-        ),
+        ('share/ament_index/resource_index/packages',
+            ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
     install_requires=['setuptools', 'numpy'],
     zip_safe=True,
     maintainer='root',
     maintainer_email='franche1984@gmail.com',
-    description='UR robot parameters and spawning package for Isaac Sim',
+    description='Forward kinematics and Jacobian computation for serial link robots',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
