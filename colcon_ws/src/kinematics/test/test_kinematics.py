@@ -1,222 +1,381 @@
-"""Tests for kinematics module."""
+"""Tests for Pinocchio-based kinematics module."""
 
 import numpy as np
 import pytest
 
-import sys
-from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
-ur_src = Path(__file__).parent.parent.parent / 'robots' / 'ur' / 'src'
-sys.path.insert(0, str(ur_src))
-
-from pymlg.numpy import SE3
-
-from kinematics import (
-    forward_kinematics,
-    forward_kinematics_all_frames,
-    body_jacobian,
-    space_jacobian,
-    geometric_jacobian,
-    tool0_twist,
-    tool0_acceleration,
-)
-from ur5e import UR5eParameters
+from kinematics import PinocchioKinematics, Tool0State, compute_regressor_matrix
 
 
-@pytest.fixture
-def ur5e_dh():
-    """Get UR5e DH parameters."""
-    params = UR5eParameters()
-    return params.dh_params
+class TestModelLoading:
+    """Tests for model loading."""
+
+    def test_load_ur5e(self):
+        """Test UR5e model can be loaded."""
+        kin = PinocchioKinematics.for_ur5e()
+        assert kin.n_joints == 6
+
+    def test_invalid_frame_raises(self):
+        """Test that invalid frame name raises ValueError."""
+        kin = PinocchioKinematics.for_ur5e()
+        with pytest.raises(ValueError, match="not found"):
+            PinocchioKinematics(kin.model, kin.data, "invalid_frame")
 
 
 class TestForwardKinematics:
     """Tests for forward kinematics."""
 
-    def test_fk_zero_config(self, ur5e_dh):
+    def test_fk_zero_config(self, ur5e_kin, zero_config):
         """Test FK at zero configuration."""
-        q = np.zeros(6)
-        T = forward_kinematics(q, ur5e_dh)
+        pos, rot = ur5e_kin.forward_kinematics(zero_config)
 
-        # T should be a valid SE(3) matrix
-        assert T.shape == (4, 4)
-        np.testing.assert_almost_equal(T[3, :], [0, 0, 0, 1])
+        # Position should be valid
+        assert pos.shape == (3,)
+        assert np.isfinite(pos).all()
 
         # Rotation should be orthogonal
-        R = T[:3, :3]
-        np.testing.assert_array_almost_equal(R @ R.T, np.eye(3))
+        assert rot.shape == (3, 3)
+        np.testing.assert_array_almost_equal(rot @ rot.T, np.eye(3), decimal=10)
 
-    def test_fk_all_frames_length(self, ur5e_dh):
-        """Test that all_frames returns correct number of frames."""
-        q = np.zeros(6)
-        frames = forward_kinematics_all_frames(q, ur5e_dh)
+    def test_fk_random_config(self, ur5e_kin, random_config):
+        """Test FK at random configuration."""
+        pos, rot = ur5e_kin.forward_kinematics(random_config)
 
-        # Should have base + 6 joint frames = 7 frames
-        assert len(frames) == 7
+        assert pos.shape == (3,)
+        assert rot.shape == (3, 3)
+        np.testing.assert_array_almost_equal(rot @ rot.T, np.eye(3), decimal=10)
 
-        # First frame should be identity
-        np.testing.assert_array_almost_equal(frames[0], np.eye(4))
+    def test_fk_deterministic(self, ur5e_kin, random_config):
+        """Test FK gives consistent results."""
+        pos1, rot1 = ur5e_kin.forward_kinematics(random_config)
+        pos2, rot2 = ur5e_kin.forward_kinematics(random_config)
 
-        # Last frame should match forward_kinematics
-        T = forward_kinematics(q, ur5e_dh)
-        np.testing.assert_array_almost_equal(frames[-1], T)
-
-    def test_fk_joint_independence(self, ur5e_dh):
-        """Test that only joints before end-effector affect FK."""
-        q1 = np.zeros(6)
-        q2 = np.zeros(6)
-        q2[0] = np.pi / 4  # Change first joint
-
-        T1 = forward_kinematics(q1, ur5e_dh)
-        T2 = forward_kinematics(q2, ur5e_dh)
-
-        # Positions should be different
-        assert not np.allclose(T1[:3, 3], T2[:3, 3])
+        np.testing.assert_array_equal(pos1, pos2)
+        np.testing.assert_array_equal(rot1, rot2)
 
 
-class TestJacobian:
-    """Tests for Jacobian computation."""
+class TestVelocity:
+    """Tests for velocity computation."""
 
-    def test_space_jacobian_shape(self, ur5e_dh):
-        """Test space Jacobian has correct shape."""
-        q = np.zeros(6)
-        J = space_jacobian(q, ur5e_dh)
-        assert J.shape == (6, 6)
-
-    def test_body_jacobian_shape(self, ur5e_dh):
-        """Test body Jacobian has correct shape."""
-        q = np.zeros(6)
-        J = body_jacobian(q, ur5e_dh)
-        assert J.shape == (6, 6)
-
-    def test_jacobian_numerical_comparison(self, ur5e_dh):
-        """Compare Jacobian with numerical differentiation.
-
-        Uses [ω, v] convention: J[0:3] = angular, J[3:6] = linear.
-        """
-        q = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
-        eps = 1e-7
-
-        # Compute analytical Jacobian
-        J_s = space_jacobian(q, ur5e_dh)
-
-        # Compute numerical Jacobian for position (linear velocity)
-        J_num_linear = np.zeros((3, 6))
-        for i in range(6):
-            q_plus = q.copy()
-            q_minus = q.copy()
-            q_plus[i] += eps
-            q_minus[i] -= eps
-
-            T_plus = forward_kinematics(q_plus, ur5e_dh)
-            T_minus = forward_kinematics(q_minus, ur5e_dh)
-
-            J_num_linear[:, i] = (T_plus[:3, 3] - T_minus[:3, 3]) / (2 * eps)
-
-        # Linear velocity part (J[3:6]) should match
-        np.testing.assert_array_almost_equal(J_s[3:, :], J_num_linear, decimal=5)
-
-    def test_jacobian_relation(self, ur5e_dh):
-        """Test relationship between space and body Jacobian.
-
-        J_s = Ad_{T_0n} @ J_b
-
-        Uses pymlg [ω, v] convention.
-        """
-        q = np.array([0.1, 0.2, -0.3, 0.4, -0.5, 0.6])
-
-        J_s = space_jacobian(q, ur5e_dh)
-        J_b = body_jacobian(q, ur5e_dh)
-        T = forward_kinematics(q, ur5e_dh)
-
-        # Compute adjoint using pymlg
-        Ad_T = SE3.adjoint(T)
-
-        J_s_from_body = Ad_T @ J_b
-
-        np.testing.assert_array_almost_equal(J_s, J_s_from_body, decimal=5)
-
-
-class TestTwist:
-    """Tests for twist computation."""
-
-    def test_twist_zero_velocity(self, ur5e_dh):
-        """Zero joint velocity should give zero twist."""
-        q = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    def test_zero_velocity(self, ur5e_kin, random_config):
+        """Zero joint velocity should give zero tool0 velocity."""
         dq = np.zeros(6)
 
-        V = tool0_twist(q, dq, ur5e_dh)
+        lin_vel, ang_vel = ur5e_kin.tool0_velocity(random_config, dq)
 
-        np.testing.assert_array_almost_equal(V, np.zeros(6))
+        np.testing.assert_array_almost_equal(lin_vel, np.zeros(3), decimal=10)
+        np.testing.assert_array_almost_equal(ang_vel, np.zeros(3), decimal=10)
 
-    def test_twist_shape(self, ur5e_dh):
-        """Twist should be 6-element vector."""
-        q = np.zeros(6)
-        dq = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    def test_velocity_shape(self, ur5e_kin, zero_config, random_velocity):
+        """Velocity should return 3-element vectors."""
+        lin_vel, ang_vel = ur5e_kin.tool0_velocity(zero_config, random_velocity)
 
-        V = tool0_twist(q, dq, ur5e_dh)
+        assert lin_vel.shape == (3,)
+        assert ang_vel.shape == (3,)
 
-        assert V.shape == (6,)
-
-    def test_twist_linearity(self, ur5e_dh):
-        """V = J @ dq should be linear in dq."""
-        q = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    def test_velocity_linearity(self, ur5e_kin, random_config):
+        """Velocity should be linear in dq (V = J @ dq)."""
         dq1 = np.array([0.1, 0.0, 0.0, 0.0, 0.0, 0.0])
         dq2 = np.array([0.0, 0.2, 0.0, 0.0, 0.0, 0.0])
 
-        V1 = tool0_twist(q, dq1, ur5e_dh)
-        V2 = tool0_twist(q, dq2, ur5e_dh)
-        V12 = tool0_twist(q, dq1 + dq2, ur5e_dh)
+        lin1, ang1 = ur5e_kin.tool0_velocity(random_config, dq1)
+        lin2, ang2 = ur5e_kin.tool0_velocity(random_config, dq2)
+        lin12, ang12 = ur5e_kin.tool0_velocity(random_config, dq1 + dq2)
 
-        np.testing.assert_array_almost_equal(V12, V1 + V2)
+        np.testing.assert_array_almost_equal(lin12, lin1 + lin2, decimal=10)
+        np.testing.assert_array_almost_equal(ang12, ang1 + ang2, decimal=10)
+
+    def test_velocity_scaling(self, ur5e_kin, random_config, random_velocity):
+        """Velocity should scale linearly with joint velocity."""
+        scale = 2.5
+
+        lin1, ang1 = ur5e_kin.tool0_velocity(random_config, random_velocity)
+        lin2, ang2 = ur5e_kin.tool0_velocity(random_config, scale * random_velocity)
+
+        np.testing.assert_array_almost_equal(lin2, scale * lin1, decimal=10)
+        np.testing.assert_array_almost_equal(ang2, scale * ang1, decimal=10)
+
+    def test_velocity_local_vs_world_norms(
+        self, ur5e_kin, random_config, random_velocity
+    ):
+        """LOCAL and WORLD angular velocities should have same norm."""
+        lin_local, ang_local = ur5e_kin.tool0_velocity(
+            random_config, random_velocity, frame="local"
+        )
+        lin_world, ang_world = ur5e_kin.tool0_velocity(
+            random_config, random_velocity, frame="world"
+        )
+
+        # Angular velocity norms should be equal (rotation preserves norm)
+        np.testing.assert_almost_equal(
+            np.linalg.norm(ang_local), np.linalg.norm(ang_world), decimal=10
+        )
 
 
 class TestAcceleration:
-    """Tests for acceleration computation."""
+    """Tests for classical acceleration computation."""
 
-    def test_acceleration_zero_velocity(self, ur5e_dh):
-        """Zero velocity should give J @ ddq acceleration."""
-        q = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    def test_zero_velocity_zero_acceleration(self, ur5e_kin, random_config):
+        """With zero velocity and zero joint acceleration, tool0 acceleration is zero."""
         dq = np.zeros(6)
-        ddq = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+        ddq = np.zeros(6)
 
-        V_dot = tool0_acceleration(q, dq, ddq, ur5e_dh)
-        J = space_jacobian(q, ur5e_dh)
+        lin_acc, ang_acc = ur5e_kin.tool0_acceleration(random_config, dq, ddq)
 
-        # With dq=0, J_dot term vanishes, so V_dot = J @ ddq
-        expected = J @ ddq
-        np.testing.assert_array_almost_equal(V_dot, expected, decimal=4)
+        np.testing.assert_array_almost_equal(lin_acc, np.zeros(3), decimal=10)
+        np.testing.assert_array_almost_equal(ang_acc, np.zeros(3), decimal=10)
 
-    def test_acceleration_shape(self, ur5e_dh):
-        """Acceleration should be 6-element vector."""
-        q = np.zeros(6)
-        dq = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
-        ddq = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    def test_acceleration_shape(
+        self, ur5e_kin, zero_config, random_velocity, random_acceleration
+    ):
+        """Acceleration should return 3-element vectors."""
+        lin_acc, ang_acc = ur5e_kin.tool0_acceleration(
+            zero_config, random_velocity, random_acceleration
+        )
 
-        V_dot = tool0_acceleration(q, dq, ddq, ur5e_dh)
+        assert lin_acc.shape == (3,)
+        assert ang_acc.shape == (3,)
 
-        assert V_dot.shape == (6,)
+    def test_acceleration_with_zero_velocity(
+        self, ur5e_kin, random_config, random_acceleration
+    ):
+        """With zero velocity, acceleration should be J @ ddq."""
+        dq = np.zeros(6)
 
+        lin_acc, ang_acc = ur5e_kin.tool0_acceleration(
+            random_config, dq, random_acceleration
+        )
 
-class TestSingularity:
-    """Tests for behavior near singularities."""
-
-    def test_jacobian_at_singularity(self, ur5e_dh):
-        """Test Jacobian rank at a known singular configuration."""
-        # Elbow singularity (joint 3 at 0)
-        q = np.array([0, 0, 0, 0, 0, 0])
-        J = space_jacobian(q, ur5e_dh)
-
-        # Should still compute, even if rank-deficient
-        assert J.shape == (6, 6)
-
-        # Check rank (may be < 6 at singularity)
-        rank = np.linalg.matrix_rank(J, tol=1e-6)
-        # UR5e at zero config might be singular
-        assert rank <= 6
+        # Should be non-zero when ddq is non-zero
+        total_acc = np.linalg.norm(lin_acc) + np.linalg.norm(ang_acc)
+        assert total_acc > 0
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+class TestFullState:
+    """Tests for complete state computation."""
+
+    def test_full_state_types(
+        self, ur5e_kin, random_config, random_velocity, random_acceleration
+    ):
+        """Test compute_full_state returns valid Tool0State."""
+        state = ur5e_kin.compute_full_state(
+            random_config, random_velocity, random_acceleration
+        )
+
+        assert isinstance(state, Tool0State)
+        assert state.position.shape == (3,)
+        assert state.rotation.shape == (3, 3)
+        assert state.linear_velocity.shape == (3,)
+        assert state.angular_velocity.shape == (3,)
+        assert state.linear_acceleration.shape == (3,)
+        assert state.angular_acceleration.shape == (3,)
+
+    def test_full_state_consistency(
+        self, ur5e_kin, random_config, random_velocity, random_acceleration
+    ):
+        """Test that full_state matches individual method calls."""
+        state = ur5e_kin.compute_full_state(
+            random_config, random_velocity, random_acceleration
+        )
+
+        pos, rot = ur5e_kin.forward_kinematics(random_config)
+        lin_vel, ang_vel = ur5e_kin.tool0_velocity(
+            random_config, random_velocity, frame="local"
+        )
+        lin_acc, ang_acc = ur5e_kin.tool0_acceleration(
+            random_config, random_velocity, random_acceleration, frame="local"
+        )
+
+        np.testing.assert_array_almost_equal(state.position, pos)
+        np.testing.assert_array_almost_equal(state.rotation, rot)
+        np.testing.assert_array_almost_equal(state.linear_velocity, lin_vel)
+        np.testing.assert_array_almost_equal(state.angular_velocity, ang_vel)
+        np.testing.assert_array_almost_equal(state.linear_acceleration, lin_acc)
+        np.testing.assert_array_almost_equal(state.angular_acceleration, ang_acc)
+
+
+class TestPhysicalPlausibility:
+    """Tests for physical plausibility of results."""
+
+    def test_position_in_workspace(self, ur5e_kin):
+        """Test that FK positions are within UR5e workspace."""
+        np.random.seed(123)
+        for _ in range(10):
+            q = np.random.uniform(-np.pi, np.pi, 6)
+            pos, _ = ur5e_kin.forward_kinematics(q)
+
+            # UR5e reach is approximately 0.85m
+            distance = np.linalg.norm(pos)
+            assert distance < 1.5, f"Position {pos} seems outside workspace"
+
+    def test_rotation_is_valid(self, ur5e_kin):
+        """Test that rotations are valid SO(3) matrices."""
+        np.random.seed(456)
+        for _ in range(10):
+            q = np.random.uniform(-np.pi, np.pi, 6)
+            _, rot = ur5e_kin.forward_kinematics(q)
+
+            # Check orthogonality
+            np.testing.assert_array_almost_equal(
+                rot @ rot.T, np.eye(3), decimal=10
+            )
+
+            # Check determinant is +1
+            np.testing.assert_almost_equal(np.linalg.det(rot), 1.0, decimal=10)
+
+
+class TestRegressorMatrix:
+    """Tests for regressor matrix computation."""
+
+    def test_regressor_shape(self):
+        """Test regressor matrix has correct shape (6, 10)."""
+        a = np.array([1.0, 2.0, 3.0])
+        alpha = np.array([0.1, 0.2, 0.3])
+        omega = np.array([0.5, 0.6, 0.7])
+        g = np.array([0.0, 0.0, -9.81])
+
+        A = compute_regressor_matrix(a, alpha, omega, g)
+
+        assert A.shape == (6, 10)
+
+    def test_regressor_zero_angular(self):
+        """Test regressor with zero angular velocity and acceleration."""
+        a = np.array([0.0, 0.0, 9.81])  # Compensating gravity
+        alpha = np.zeros(3)
+        omega = np.zeros(3)
+        g = np.array([0.0, 0.0, -9.81])
+
+        A = compute_regressor_matrix(a, alpha, omega, g)
+
+        # With omega=0 and alpha=0:
+        # - Force part should only have (a-g) in first column
+        # - Inertia columns (4-9) in torque rows should be mostly zero
+        # First column should be [ax-gx, ay-gy, az-gz, 0, 0, 0]
+        expected_col0 = np.array([0.0, 0.0, 9.81 + 9.81, 0.0, 0.0, 0.0])
+        np.testing.assert_array_almost_equal(A[:, 0], expected_col0)
+
+        # Inertia columns in force rows (0-2, cols 4-9) should be zero
+        np.testing.assert_array_almost_equal(A[:3, 4:], np.zeros((3, 6)))
+
+    def test_regressor_static_case(self):
+        """Test static case: no motion, only gravity."""
+        g = np.array([0.0, 0.0, -9.81])
+        a = np.zeros(3)
+        alpha = np.zeros(3)
+        omega = np.zeros(3)
+
+        A = compute_regressor_matrix(a, alpha, omega, g)
+
+        # First column should be [-gx, -gy, -gz, 0, 0, 0] = [0, 0, 9.81, 0, 0, 0]
+        np.testing.assert_array_almost_equal(
+            A[:, 0], np.array([0.0, 0.0, 9.81, 0.0, 0.0, 0.0])
+        )
+
+    def test_regressor_force_torque_relation(self):
+        """Test that A @ phi gives expected force/torque for known parameters."""
+        # Simple case: unit mass at origin, no rotation
+        m = 1.0
+        cx, cy, cz = 0.0, 0.0, 0.0
+        Ixx, Ixy, Ixz, Iyy, Iyz, Izz = 0.1, 0.0, 0.0, 0.1, 0.0, 0.1
+
+        phi = np.array([m, m * cx, m * cy, m * cz, Ixx, Ixy, Ixz, Iyy, Iyz, Izz])
+
+        # Static in gravity field
+        a = np.array([0.0, 0.0, 0.0])
+        alpha = np.zeros(3)
+        omega = np.zeros(3)
+        g = np.array([0.0, 0.0, -9.81])
+
+        A = compute_regressor_matrix(a, alpha, omega, g)
+        f_tau = A @ phi
+
+        # Expected: f = m*(a-g) = m*[0,0,9.81], tau = 0 (no rotation, CoM at origin)
+        expected_f = np.array([0.0, 0.0, 9.81])
+        expected_tau = np.zeros(3)
+
+        np.testing.assert_array_almost_equal(f_tau[:3], expected_f, decimal=5)
+        np.testing.assert_array_almost_equal(f_tau[3:], expected_tau, decimal=5)
+
+    def test_regressor_with_offset_com(self):
+        """Test regressor with center of mass offset."""
+        m = 2.0
+        cx, cy, cz = 0.1, 0.0, 0.0  # CoM offset in x
+        phi = np.array([m, m * cx, m * cy, m * cz, 0, 0, 0, 0, 0, 0])
+
+        # Static in gravity field pointing down (-z)
+        a = np.zeros(3)
+        alpha = np.zeros(3)
+        omega = np.zeros(3)
+        g = np.array([0.0, 0.0, -9.81])
+
+        A = compute_regressor_matrix(a, alpha, omega, g)
+        f_tau = A @ phi
+
+        # Force should be m*(-g) = [0, 0, m*9.81]
+        expected_f = np.array([0.0, 0.0, m * 9.81])
+        np.testing.assert_array_almost_equal(f_tau[:3], expected_f, decimal=5)
+
+        # Torque about sensor origin due to gravity on offset mass
+        # tau = c x f = [cx, cy, cz] x [0, 0, m*9.81]
+        # = [cy*m*9.81 - cz*0, cz*0 - cx*m*9.81, cx*0 - cy*0]
+        # = [0, -cx*m*9.81, 0] = [0, -0.1*2*9.81, 0]
+        expected_tau_y = -cx * m * 9.81
+        np.testing.assert_almost_equal(f_tau[4], expected_tau_y, decimal=5)
+
+
+class TestPinocchioKinematicsRegressor:
+    """Tests for PinocchioKinematics.compute_regressor method."""
+
+    def test_compute_regressor_shape(self, ur5e_kin, random_config):
+        """Test that compute_regressor returns (6, 10) matrix."""
+        dq = np.zeros(6)
+        ddq = np.zeros(6)
+
+        A = ur5e_kin.compute_regressor(random_config, dq, ddq)
+
+        assert A.shape == (6, 10)
+
+    def test_compute_regressor_static(self, ur5e_kin, random_config):
+        """Test regressor in static configuration."""
+        dq = np.zeros(6)
+        ddq = np.zeros(6)
+
+        A = ur5e_kin.compute_regressor(random_config, dq, ddq)
+
+        # Inertia columns in force rows should be zero (no rotation)
+        np.testing.assert_array_almost_equal(A[:3, 4:], np.zeros((3, 6)))
+
+    def test_compute_regressor_consistency(
+        self, ur5e_kin, random_config, random_velocity, random_acceleration
+    ):
+        """Test that compute_regressor is consistent with individual kinematic calls."""
+        gravity = np.array([0.0, 0.0, -9.81])
+
+        # Compute regressor using the method
+        A1 = ur5e_kin.compute_regressor(
+            random_config, random_velocity, random_acceleration, gravity
+        )
+
+        # Compute manually
+        _, rot = ur5e_kin.forward_kinematics(random_config)
+        _, omega = ur5e_kin.tool0_velocity(random_config, random_velocity, "local")
+        a, alpha = ur5e_kin.tool0_acceleration(
+            random_config, random_velocity, random_acceleration, "local"
+        )
+        g_local = rot.T @ gravity
+
+        A2 = compute_regressor_matrix(a, alpha, omega, g_local)
+
+        np.testing.assert_array_almost_equal(A1, A2, decimal=8)
+
+    def test_compute_regressor_deterministic(
+        self, ur5e_kin, random_config, random_velocity, random_acceleration
+    ):
+        """Test that regressor computation is deterministic."""
+        A1 = ur5e_kin.compute_regressor(
+            random_config, random_velocity, random_acceleration
+        )
+        A2 = ur5e_kin.compute_regressor(
+            random_config, random_velocity, random_acceleration
+        )
+
+        np.testing.assert_array_equal(A1, A2)

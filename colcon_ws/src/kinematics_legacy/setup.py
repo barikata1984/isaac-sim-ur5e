@@ -1,10 +1,10 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
-package_name = 'kinematics'
+package_name = 'kinematics_legacy'
 
 setup(
     name=package_name,
-    version='0.2.0',
+    version='0.1.0',
     packages=[package_name],
     package_dir={package_name: 'src'},
     data_files=[
@@ -16,7 +16,7 @@ setup(
     zip_safe=True,
     maintainer='root',
     maintainer_email='franche1984@gmail.com',
-    description='Pinocchio-based forward kinematics and velocity computation',
+    description='Legacy forward kinematics using pymlg (deprecated)',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

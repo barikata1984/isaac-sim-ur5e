@@ -1,4 +1,7 @@
-# Kinematics Package
+# Kinematics Legacy Package
+
+> **⚠️ 非推奨**: このパッケージは pymlg ベースのレガシー実装です。
+> 新しい実装は Pinocchio ベースの `kinematics` パッケージを使用してください。
 
 シリアルリンクロボットの順運動学とヤコビアン計算を提供するパッケージです。
 

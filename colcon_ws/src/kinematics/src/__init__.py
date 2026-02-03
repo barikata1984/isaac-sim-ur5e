@@ -1,8 +1,21 @@
-"""Kinematics package for serial link robots.
+"""Kinematics package - Pinocchio-based kinematics computation.
 
-This package provides:
-- Forward kinematics (kinematics module)
-- Jacobian computation (kinematics module)
+Provides forward kinematics, velocity, and acceleration for UR robots
+using Pinocchio library and ur_description URDF.
 
-Uses pymlg [ω, v] convention (angular velocity, linear velocity).
+Output convention: [linear, angular] (v, omega) for velocity/acceleration.
 """
+
+from .kinematics import (
+    Tool0State,
+    PinocchioKinematics,
+    load_ur_model,
+    compute_regressor_matrix,
+)
+
+__all__ = [
+    "Tool0State",
+    "PinocchioKinematics",
+    "load_ur_model",
+    "compute_regressor_matrix",
+]
