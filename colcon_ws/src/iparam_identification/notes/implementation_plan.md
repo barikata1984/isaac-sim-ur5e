@@ -407,7 +407,7 @@ def apply_jerk_limit(
 
 ## 3. Validation Strategy
 
-### 3.1 Phase 1: 既知構成物体での検証
+### 3.1 Phase 1: 既知構成物体での検証 ✅ 完了
 
 **手順**:
 1. Isaac Sim で単純形状（直方体、円柱）を生成
@@ -417,6 +417,13 @@ def apply_jerk_limit(
 **評価指標** (論文 Eq. 37):
 $$e_{rel}(\hat{x}) = \left| \frac{\hat{x} - x_{th}}{x_{th}} \right| \times 100\%$$
 
+**実施結果** (2026-02-04):
+- テスト物体: アルミニウム直方体 (10×15×20cm, 8.1kg)
+- 質量誤差: **0.01%** (OLS/TLS両方)
+- 慣性誤差: **< 0.1%** (全成分)
+- 条件数: 4.57（良好）
+- 詳細: `implementation_log.md` 参照
+
 ### 3.2 Phase 2: objファイル物体での検証
 
 **手順**:
@@ -424,9 +431,11 @@ $$e_{rel}(\hat{x}) = \left| \frac{\hat{x} - x_{th}}{x_{th}} \right| \times 100\%
 2. Isaac Simにインポート
 3. 推定結果と提供パラメータを比較
 
+**ステータス**: 未実施（Phase 1で十分な精度が確認されたため、必要に応じて実施）
+
 ---
 
-## 4. Package Structure (Final)
+## 4. Package Structure (Current)
 
 ```
 iparam_identification/
@@ -435,14 +444,17 @@ iparam_identification/
 ├── pytest.ini
 ├── resource/
 │   └── iparam_identification
+├── scripts/                          # ✅ 追加
+│   ├── run_test.sh                   # テスト実行スクリプト
+│   └── run_identification_test.py    # Isaac Sim統合テスト
 ├── src/
 │   ├── __init__.py
-│   ├── sensor/
+│   ├── sensor/                       # ✅ 完了
 │   │   ├── __init__.py
 │   │   ├── contact_sensor.py
 │   │   ├── data_types.py
 │   │   └── data_buffer.py
-│   ├── estimation/
+│   ├── estimation/                   # ✅ 完了
 │   │   ├── __init__.py
 │   │   ├── base_estimator.py
 │   │   ├── batch_ls.py
@@ -450,20 +462,19 @@ iparam_identification/
 │   │   ├── rls.py
 │   │   ├── rtls.py
 │   │   └── svd_update.py
-│   └── trajectory/
+│   └── trajectory/                   # 🔄 未実装（任意）
 │       ├── __init__.py
 │       ├── excitation_trajectory.py
 │       ├── condition_optimizer.py
 │       └── jerk_limiter.py
 ├── test/
 │   ├── __init__.py
-│   ├── test_sensor.py
-│   ├── test_estimation.py
-│   └── test_trajectory.py
-├── config/
-│   └── default_params.yaml
+│   ├── conftest.py
+│   ├── test_sensor.py                # 36件
+│   └── test_estimation.py            # 37件
 └── notes/
     ├── implementation_plan.md
+    ├── implementation_log.md
     └── references.md
 ```
 
@@ -471,42 +482,59 @@ iparam_identification/
 
 ## 5. Dependencies
 
-### 既存パッケージ
-- `kinematics`: 回帰行列計算、運動学
+### ROS 2 パッケージ
+- `kinematics`: 回帰行列計算、運動学（Pinocchio使用）
 - `trajectories`: フーリエ軌道生成
+- `ur`: ロボットスポーン
 
-### 外部ライブラリ
+### Python ライブラリ
 - `numpy`: 数値計算
 - `scipy`: SVD、最適化
-- `isaacsim`: Contact Sensor API
+
+### Isaac Sim 環境専用
+- `pinocchio` (pin==2.7.0): 運動学計算（Isaac Sim Python 3.11にインストール）
+- `isaacsim`: シミュレーションAPI
+
+### 注意事項
+- Pinocchioは**Isaac Sim の Python環境**に直接インストールが必要
+  ```bash
+  /isaac-sim/python.sh -m pip install pin==2.7.0
+  ```
+- ROS側のapt版pinocchioとは共存しない（削除推奨）
 
 ---
 
-## 6. Timeline (Estimated)
+## 6. Timeline
 
-| Phase | 内容 | 主要成果物 |
-|-------|------|-----------|
-| **1** | センサー統合 | `contact_sensor.py`, `data_buffer.py` |
-| **2a** | バッチ推定 | `batch_ls.py`, `batch_tls.py` |
-| **2b** | 再帰推定 | `rls.py`, `rtls.py`, `svd_update.py` |
-| **3** | 軌道最適化 | `excitation_trajectory.py` |
-| **V** | 検証 | テストケース、検証結果 |
+| Phase | 内容 | 主要成果物 | 状態 |
+|-------|------|-----------|------|
+| **1** | センサー統合 | `contact_sensor.py`, `data_buffer.py` | ✅ 完了 |
+| **2a** | バッチ推定 | `batch_ls.py`, `batch_tls.py` | ✅ 完了 |
+| **2b** | 再帰推定 | `rls.py`, `rtls.py`, `svd_update.py` | ✅ 完了 |
+| **V** | Isaac Sim検証 | `run_identification_test.py` | ✅ 完了 |
+| **3** | 軌道最適化 | `excitation_trajectory.py` | 🔄 任意 |
 
 ---
 
-## 7. Open Questions
+## 7. Open Questions → 解決済み
 
-1. **Isaac Sim Contact Sensor**
+1. **Isaac Sim Contact Sensor** ✅
    - 手首に取り付けた力/トルクセンサーの代わりに使用可能か？
-   - 把持物体に作用する反力の取得方法は？
+   - **回答**: シミュレーションでは逆動力学から力/トルクを計算。`y = A @ phi_true`として測定値を合成。
 
-2. **座標変換**
+2. **座標変換** ✅
    - Contact Sensor の出力座標系は？
    - tool0 フレームへの変換が必要か？
+   - **回答**: `kinematics.compute_regressor()` が tool0 フレームで出力するためそのまま使用可能。
 
-3. **サンプリングレート**
+3. **サンプリングレート** ✅
    - Isaac Sim の物理シミュレーションレートは？
    - データ収集の最適な頻度は？
+   - **回答**: 物理レート 240Hz、軌道サンプリング 100Hz で十分な精度を達成。
+
+4. **Python環境衝突** ✅ (新規発見・解決)
+   - Isaac Sim (Python 3.11) と ROS 2 (Python 3.12) の共存
+   - **解決策**: Pinocchio を Isaac Sim Python に直接インストール、URDFキャッシュ機能を実装
 
 ---
 

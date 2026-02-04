@@ -46,21 +46,58 @@ def load_ur_model(ur_type: str = "ur5e") -> Tuple[pin.Model, pin.Data]:
     Raises:
         RuntimeError: If xacro processing or model loading fails.
     """
+    import os
+    import tempfile
+
+    # First, try to use a pre-generated URDF file
+    cache_dir = os.path.join(tempfile.gettempdir(), "ur_urdf_cache")
+    cached_urdf_path = os.path.join(cache_dir, f"{ur_type}.urdf")
+
+    if os.path.exists(cached_urdf_path):
+        # Use cached URDF
+        try:
+            model = pin.buildModelFromUrdf(cached_urdf_path)
+            data = model.createData()
+            return model, data
+        except Exception:
+            pass  # Fall through to regenerate
+
     ur_description_path = get_package_share_directory("ur_description")
     xacro_file = f"{ur_description_path}/urdf/ur.urdf.xacro"
 
-    # Generate URDF from xacro
+    # Generate URDF from xacro with clean environment to avoid
+    # Python version conflicts when running in Isaac Sim
+    env = os.environ.copy()
+    # Remove Isaac Sim Python paths to use system Python for xacro
+    pythonpath = env.get("PYTHONPATH", "")
+    filtered_paths = [
+        p for p in pythonpath.split(os.pathsep)
+        if "isaac-sim" not in p and p
+    ]
+    env["PYTHONPATH"] = os.pathsep.join(filtered_paths)
+    # Use system Python
+    env.pop("LD_LIBRARY_PATH", None)
+
     try:
         result = subprocess.run(
             ["xacro", xacro_file, f"ur_type:={ur_type}", f"name:={ur_type}"],
             capture_output=True,
             text=True,
             check=True,
+            env=env,
         )
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Failed to process xacro: {e.stderr}") from e
 
     urdf_string = result.stdout
+
+    # Cache the URDF for future use
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cached_urdf_path, "w") as f:
+            f.write(urdf_string)
+    except Exception:
+        pass  # Caching is optional
 
     # Load into Pinocchio
     model = pin.buildModelFromXML(urdf_string)
