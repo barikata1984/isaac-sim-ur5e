@@ -1,0 +1,62 @@
+# ============================================================
+# Docker Compose for Python 3.11 Unified Environment
+# ============================================================
+# This compose file uses the multi-stage Dockerfile.python311
+# which provides a unified Python 3.11 environment for both
+# Isaac Sim and ROS 2 Jazzy.
+# ============================================================
+
+services:
+  isaac-sim:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.python311
+      # Enable BuildKit for better caching of multi-stage builds
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: isaac-sim-ur5e:python311
+    container_name: isaac-sim-ur5e
+    network_mode: host
+    # Increased shm_size for ROS 2 source build stability
+    shm_size: "2gb"
+    environment:
+      - ACCEPT_EULA=Y
+      - PRIVACY_CONSENT=Y
+      - DISPLAY=${DISPLAY}
+      # Python 3.11 unified environment
+      - ROS_DISTRO=jazzy
+      - ROS_PYTHON_VERSION=3
+      - PYTHONPATH=/opt/ros311/lib/python3.11/site-packages
+    volumes:
+      # X11 socket for GUI
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      # Isaac Sim caches (persistent across container rebuilds)
+      - ${HOME}/docker/isaac-sim/cache/main:/root/.cache/isaac-sim
+      - ${HOME}/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache
+      - ${HOME}/docker/isaac-sim/data:/root/.local/share/ov/data
+      # SSH and Git config from host
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+      # Workspace
+      - ..:/workspaces/isaac-sim-ur5e
+      # URDF cache (persistent) - avoids xacro rebuilds
+      - ur_urdf_cache:/tmp/ur_urdf_cache
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    stdin_open: true
+    tty: true
+    command: sleep infinity
+
+# Named volumes for persistent data
+volumes:
+  # URDF cache volume - persists generated URDFs across container restarts
+  # This avoids needing to run xacro (which had Python conflicts) repeatedly
+  ur_urdf_cache:
+    driver: local
