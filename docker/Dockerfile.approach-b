@@ -1,0 +1,192 @@
+# ============================================================
+# Isaac Sim + ROS 2 Jazzy - Unified Python 3.11 Environment
+# ============================================================
+# Approach B: Use Isaac Sim's Python 3.11 directly to build ROS 2
+# ============================================================
+
+FROM nvcr.io/nvidia/isaac-sim:5.1.0
+
+USER root
+
+# ============================================================
+# Set Isaac Sim Python as the system Python
+# ============================================================
+# Isaac Sim includes Python 3.11:
+# - Binary: /isaac-sim/kit/python/bin/python3.11
+# - Headers: /isaac-sim/kit/python/include/python3.11/
+# - Library: /isaac-sim/kit/python/lib/libpython3.11.so
+# ============================================================
+
+ENV ISAAC_PYTHON=/isaac-sim/kit/python/bin/python3.11
+ENV ISAAC_PYTHON_INCLUDE=/isaac-sim/kit/python/include/python3.11
+ENV ISAAC_PYTHON_LIB=/isaac-sim/kit/python/lib
+
+# Link python commands to Isaac Sim Python
+# This makes python, python3 point to Isaac Sim's Python
+RUN ln -sf ${ISAAC_PYTHON} /usr/local/bin/python3 \
+    && ln -sf ${ISAAC_PYTHON} /usr/local/bin/python \
+    && update-alternatives --install /usr/bin/python3 python3 ${ISAAC_PYTHON} 100
+
+# CMake environment variables to detect Isaac Sim Python
+ENV Python3_EXECUTABLE=${ISAAC_PYTHON}
+ENV PYTHON_EXECUTABLE=${ISAAC_PYTHON}
+ENV PYTHON_INCLUDE_DIR=${ISAAC_PYTHON_INCLUDE}
+ENV PYTHON_LIBRARY=${ISAAC_PYTHON_LIB}/libpython3.11.so
+
+# ============================================================
+# Install basic tools
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    wget \
+    curl \
+    gnupg2 \
+    lsb-release \
+    locales \
+    software-properties-common \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up locale
+RUN locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+
+# Ensure standard commands are available
+# Add Isaac Sim Python bin to PATH for pip-installed tools (rosdep, colcon, etc.)
+ENV PATH="/isaac-sim/kit/python/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
+
+# ============================================================
+# Install ROS 2 build dependencies (system packages)
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    pkg-config \
+    # ROS 2 core library dependencies
+    libbullet-dev \
+    libasio-dev \
+    libtinyxml2-dev \
+    libcunit1-dev \
+    libacl1-dev \
+    liblttng-ust-dev \
+    libconsole-bridge-dev \
+    libyaml-cpp-dev \
+    python3-yaml \
+    cmake-extras \
+    # Boost libraries for OMPL/MoveIt (if needed)
+    libboost-all-dev \
+    libboost-filesystem-dev \
+    libboost-program-options-dev \
+    libboost-system-dev \
+    libfmt-dev \
+    # Geometric computation libraries
+    libqhull-dev \
+    libassimp-dev \
+    liboctomap-dev \
+    libfcl-dev \
+    libeigen3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# Install Python packages (directly into Isaac Sim Python)
+# ============================================================
+# empy 3.3.4 is mandatory for ROS 2 Jazzy build
+RUN ${ISAAC_PYTHON} -m pip install --no-cache-dir \
+    empy==3.3.4 \
+    catkin_pkg \
+    lark \
+    colcon-common-extensions \
+    vcstool \
+    "pybind11[global]" \
+    PyYAML \
+    numpy \
+    setuptools==70.0.0 \
+    netifaces \
+    psutil
+
+# ============================================================
+# Set up ROS 2 repository
+# ============================================================
+RUN wget https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc \
+    && apt-key add ros.asc && rm ros.asc
+
+RUN echo "deb [arch=$(dpkg --print-architecture)] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" \
+    > /etc/apt/sources.list.d/ros2.list
+
+# Install rosdep and rosinstall-generator (pip version)
+RUN ${ISAAC_PYTHON} -m pip install --no-cache-dir rosdep rosinstall-generator \
+    && rosdep init || true \
+    && rosdep update --rosdistro jazzy
+
+# ============================================================
+# Build ROS 2 from source
+# ============================================================
+# Minimal package set:
+# - Core: rcutils, rcl, rmw, rclpy
+# - Messages: std_msgs, sensor_msgs, geometry_msgs, nav_msgs
+# - TF: tf2, tf2_ros, tf2_msgs
+# - CLI: ros2topic, ros2node, ros2run, ros2pkg
+# ============================================================
+WORKDIR /opt/ros2_jazzy_ws
+
+RUN rosinstall_generator --deps --rosdistro jazzy \
+    rcutils rcl rmw rclpy \
+    std_msgs sensor_msgs geometry_msgs nav_msgs \
+    tf2 tf2_ros tf2_msgs \
+    ros2topic ros2node ros2run ros2pkg ros2launch \
+    launch launch_ros launch_xml launch_yaml \
+    ros_environment common_interfaces rosgraph_msgs \
+    > ros2.jazzy.rosinstall \
+    && mkdir -p src && vcs import src < ros2.jazzy.rosinstall
+
+# Create symlink for Python3.11 headers where CMake can find them
+RUN ln -sf /isaac-sim/kit/python/include/python3.11 /usr/include/python3 || true
+
+# Build with Isaac Sim environment sourced
+# Install to /opt/ros311 (outside Isaac Sim site-packages)
+RUN /bin/bash -c "source /isaac-sim/setup_python_env.sh && \
+    colcon build --merge-install --install-base /opt/ros311 --cmake-args \
+        -DPython3_EXECUTABLE=${ISAAC_PYTHON} \
+        -DPYTHON_EXECUTABLE=${ISAAC_PYTHON} \
+        -DPYTHON_INCLUDE_DIR=${ISAAC_PYTHON_INCLUDE} \
+        -DPYTHON_LIBRARY=${ISAAC_PYTHON_LIB}/libpython3.11.so"
+
+# Copy necessary shared libraries
+RUN cp /usr/lib/x86_64-linux-gnu/libtinyxml2.so* /opt/ros311/lib/ 2>/dev/null || true \
+    && cp /usr/lib/x86_64-linux-gnu/libconsole_bridge.so* /opt/ros311/lib/ 2>/dev/null || true
+
+# ============================================================
+# Install additional Python packages (for the project)
+# ============================================================
+# Note: pymlg is not available in PyPI, skipping for now
+RUN ${ISAAC_PYTHON} -m pip install --no-cache-dir \
+    pin==2.7.0 \
+    scipy \
+    matplotlib
+
+# ============================================================
+# Environment setup
+# ============================================================
+ENV ROS_DISTRO=jazzy
+ENV LD_LIBRARY_PATH=/opt/ros311/lib:${LD_LIBRARY_PATH}
+
+# Shell setup
+# Source order: Isaac Sim → ROS Jazzy (apt) → ROS 311 → colcon_ws
+RUN echo '# Isaac Sim Python environment' >> /root/.bashrc \
+    && echo 'source /isaac-sim/setup_python_env.sh' >> /root/.bashrc \
+    && echo '' >> /root/.bashrc \
+    && echo '# ROS 2 Jazzy (apt packages for launch)' >> /root/.bashrc \
+    && echo 'source /opt/ros/jazzy/setup.bash 2>/dev/null || true' >> /root/.bashrc \
+    && echo '' >> /root/.bashrc \
+    && echo '# ROS 2 Jazzy (Python 3.11 build)' >> /root/.bashrc \
+    && echo 'export ROS_DISTRO=jazzy' >> /root/.bashrc \
+    && echo 'source /opt/ros311/setup.bash 2>/dev/null || true' >> /root/.bashrc \
+    && echo '' >> /root/.bashrc \
+    && echo '# Project workspace' >> /root/.bashrc \
+    && echo 'if [ -f "/workspaces/isaac-sim-ur5e/colcon_ws/install/setup.bash" ]; then' >> /root/.bashrc \
+    && echo '    source /workspaces/isaac-sim-ur5e/colcon_ws/install/setup.bash' >> /root/.bashrc \
+    && echo 'fi' >> /root/.bashrc \
+    && echo 'cd /workspaces/isaac-sim-ur5e' >> /root/.bashrc
+
+WORKDIR /workspaces/isaac-sim-ur5e
+USER root

@@ -1,16 +1,112 @@
 {
-    "name": "Isaac Sim UR5e RL",
-    "dockerComposeFile": "../docker/docker-compose.yml",
+    "name": "Isaac Sim UR5e (Unified Python 3.11)",
+
+    "dockerComposeFile": "../docker/docker-compose.approach-b.yml",
     "service": "isaac-sim",
     "workspaceFolder": "/workspaces/isaac-sim-ur5e",
+
     "remoteUser": "root",
     "overrideCommand": true,
+
     "customizations": {
         "vscode": {
             "extensions": [
+                // Python development
                 "ms-python.python",
-                "ms-python.vscode-pylance"
-            ]
+                "ms-python.vscode-pylance",
+                "ms-python.debugpy",
+
+                // ROS development
+                "ms-iot.vscode-ros",
+
+                // C++/CMake (for ROS packages)
+                "ms-vscode.cmake-tools",
+                "ms-vscode.cpptools",
+
+                // YAML/XML (for ROS launch, package.xml)
+                "redhat.vscode-yaml"
+            ],
+            "settings": {
+                // ============================================
+                // Python configuration
+                // ============================================
+                // Use Isaac Sim Python
+                "python.defaultInterpreterPath": "/isaac-sim/kit/python/bin/python3.11",
+
+                // Pylance analysis paths
+                "python.analysis.extraPaths": [
+                    // ROS 2 Python 3.11 build
+                    "/opt/ros311/lib/python3.11/site-packages",
+                    // Project colcon_ws
+                    "/workspaces/isaac-sim-ur5e/colcon_ws/install/lib/python3.11/site-packages",
+                    // Isaac Sim packages
+                    "/isaac-sim/exts/omni.isaac.core_archive/pip_prebundle",
+                    "/isaac-sim/exts/omni.isaac.ml_archive/pip_prebundle",
+                    "/isaac-sim/kit/python/lib/python3.11/site-packages"
+                ],
+
+                "python.analysis.typeCheckingMode": "basic",
+                "python.languageServer": "Pylance",
+
+                // Environment file
+                "python.envFile": "${workspaceFolder}/.env",
+
+                // ============================================
+                // ROS configuration
+                // ============================================
+                "ros.distro": "jazzy",
+
+                // ============================================
+                // Terminal environment variables
+                // ============================================
+                "terminal.integrated.env.linux": {
+                    "PYTHONPATH": "/opt/ros311/lib/python3.11/site-packages",
+                    "ROS_DISTRO": "jazzy",
+                    "Python3_EXECUTABLE": "/isaac-sim/kit/python/bin/python3.11"
+                },
+
+                // ============================================
+                // Editor settings
+                // ============================================
+                "editor.formatOnSave": true,
+                "editor.rulers": [100],
+
+                "[python]": {
+                    "editor.defaultFormatter": "ms-python.python",
+                    "editor.tabSize": 4
+                },
+
+                // ============================================
+                // CMake configuration (for ROS package builds)
+                // ============================================
+                "cmake.configureArgs": [
+                    "-DPython3_EXECUTABLE=/isaac-sim/kit/python/bin/python3.11",
+                    "-DPYTHON_EXECUTABLE=/isaac-sim/kit/python/bin/python3.11"
+                ]
+            }
         }
-    }
+    },
+
+    // Run after container creation (first time only)
+    // Source ROS environment and build colcon workspace
+    "postCreateCommand": "/bin/bash -c 'source /opt/ros311/setup.bash && cd /workspaces/isaac-sim-ur5e/colcon_ws && colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE=/isaac-sim/kit/python/bin/python3.11'",
+
+    // Run on container start (every time)
+    "postStartCommand": "/bin/bash -c 'source /isaac-sim/setup_python_env.sh && source /opt/ros311/setup.bash'",
+
+    // Remote environment variables
+    "remoteEnv": {
+        "ROS_DISTRO": "jazzy",
+        "ROS_PYTHON_VERSION": "3",
+        "PYTHONPATH": "/opt/ros311/lib/python3.11/site-packages",
+        "LD_LIBRARY_PATH": "/opt/ros311/lib",
+        "Python3_EXECUTABLE": "/isaac-sim/kit/python/bin/python3.11",
+        "PYTHON_EXECUTABLE": "/isaac-sim/kit/python/bin/python3.11"
+    },
+
+    // Port forwarding (add as needed)
+    "forwardPorts": [],
+
+    // Features (add if needed)
+    "features": {}
 }

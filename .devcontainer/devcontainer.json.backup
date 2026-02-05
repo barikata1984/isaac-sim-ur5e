@@ -1,0 +1,16 @@
+{
+    "name": "Isaac Sim UR5e RL",
+    "dockerComposeFile": "../docker/docker-compose.yml",
+    "service": "isaac-sim",
+    "workspaceFolder": "/workspaces/isaac-sim-ur5e",
+    "remoteUser": "root",
+    "overrideCommand": true,
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+            ]
+        }
+    }
+}

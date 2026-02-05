@@ -1,0 +1,108 @@
+# ============================================================
+# Docker Compose - Isaac Sim + ROS 2 Unified Python 3.11
+# ============================================================
+# Approach B: Unified environment using Isaac Sim Python directly
+# ============================================================
+
+services:
+  isaac-sim:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.approach-b
+      # Enable BuildKit cache for faster builds
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+      # Add DNS servers for build
+      network: host
+
+    image: isaac-sim-ur5e:approach-b-python311
+    container_name: isaac-sim-ur5e-approach-b
+
+    # Use host network for ROS 2 communication
+    network_mode: host
+
+    # DNS servers for container
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+    # Shared memory size (increased for ROS 2 build stability)
+    shm_size: "2gb"
+
+    environment:
+      # Isaac Sim EULA consent
+      - ACCEPT_EULA=Y
+      - PRIVACY_CONSENT=Y
+
+      # X11 display
+      - DISPLAY=${DISPLAY}
+
+      # ROS 2 configuration
+      - ROS_DISTRO=jazzy
+      - ROS_PYTHON_VERSION=3
+
+      # Python environment (for CMake detection)
+      - Python3_EXECUTABLE=/isaac-sim/kit/python/bin/python3.11
+      - PYTHON_EXECUTABLE=/isaac-sim/kit/python/bin/python3.11
+
+    volumes:
+      # --------------------------------------------
+      # X11 socket (for GUI display)
+      # --------------------------------------------
+      - /tmp/.X11-unix:/tmp/.X11-unix
+
+      # --------------------------------------------
+      # Isaac Sim caches (persisted across container rebuilds)
+      # --------------------------------------------
+      - ${HOME}/docker/isaac-sim/cache/main:/root/.cache/isaac-sim
+      - ${HOME}/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache
+      - ${HOME}/docker/isaac-sim/data:/root/.local/share/ov/data
+
+      # --------------------------------------------
+      # Development config (read-only from host)
+      # --------------------------------------------
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+
+      # --------------------------------------------
+      # Workspace
+      # --------------------------------------------
+      - ..:/workspaces/isaac-sim-ur5e
+
+      # --------------------------------------------
+      # colcon build cache (for faster builds)
+      # Persisted as named volumes
+      # --------------------------------------------
+      - colcon_build_cache:/workspaces/isaac-sim-ur5e/colcon_ws/build
+      - colcon_install_cache:/workspaces/isaac-sim-ur5e/colcon_ws/install
+      - colcon_log_cache:/workspaces/isaac-sim-ur5e/colcon_ws/log
+
+    devices:
+      # DRI device (for GPU rendering)
+      - /dev/dri:/dev/dri
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            # Use all NVIDIA GPUs
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+
+    stdin_open: true
+    tty: true
+    command: sleep infinity
+
+# ============================================================
+# Named Volumes (for persistence)
+# ============================================================
+volumes:
+  # colcon build cache
+  # Preserves build artifacts across container restarts
+  colcon_build_cache:
+    driver: local
+  colcon_install_cache:
+    driver: local
+  colcon_log_cache:
+    driver: local
