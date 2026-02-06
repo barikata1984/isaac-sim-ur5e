@@ -70,6 +70,11 @@ services:
       - ..:/workspaces/isaac-sim-ur5e
 
       # --------------------------------------------
+      # Entrypoint script
+      # --------------------------------------------
+      - ./entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
+
+      # --------------------------------------------
       # colcon build cache (for faster builds)
       # Persisted as named volumes
       # --------------------------------------------
@@ -92,6 +97,7 @@ services:
 
     stdin_open: true
     tty: true
+    entrypoint: ["/usr/local/bin/entrypoint.sh"]
     command: sleep infinity
 
 # ============================================================
