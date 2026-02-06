@@ -176,9 +176,10 @@ RUN /bin/bash -c "source /isaac-sim/setup_python_env.sh \
             -DPYTHON_EXECUTABLE=${ISAAC_PYTHON}"
 
 # Generate URDF cache
+# xacro is installed via pip into Isaac Sim's Python bin directory
 RUN /bin/bash -c "source install/setup.bash \
     && mkdir -p /tmp/ur_urdf_cache \
-    && ${ISAAC_PYTHON} /usr/local/bin/xacro \
+    && ${ISAAC_PYTHON} /isaac-sim/kit/python/bin/xacro \
         install/ur_description/share/ur_description/urdf/ur.urdf.xacro \
         ur_type:=ur5e name:=ur5e > /tmp/ur_urdf_cache/ur5e.urdf"
 
@@ -188,28 +189,18 @@ RUN /bin/bash -c "source install/setup.bash \
 ENV ROS_DISTRO=jazzy
 ENV LD_LIBRARY_PATH=/opt/ros311/lib:${LD_LIBRARY_PATH}
 
-# Shell setup
-# Source order: Isaac Sim → ROS Jazzy (apt) → ROS 311 → colcon_ws
-RUN echo '# Isaac Sim Python environment' >> /root/.bashrc \
-    && echo 'source /isaac-sim/setup_python_env.sh' >> /root/.bashrc \
-    && echo '' >> /root/.bashrc \
-    && echo '# ROS 2 Jazzy (apt packages for launch)' >> /root/.bashrc \
-    && echo 'source /opt/ros/jazzy/setup.bash 2>/dev/null || true' >> /root/.bashrc \
-    && echo '' >> /root/.bashrc \
-    && echo '# ROS 2 Jazzy (Python 3.11 build)' >> /root/.bashrc \
-    && echo 'export ROS_DISTRO=jazzy' >> /root/.bashrc \
-    && echo 'source /opt/ros311/setup.bash 2>/dev/null || true' >> /root/.bashrc \
-    && echo '' >> /root/.bashrc \
-    && echo '# Project underlay workspace' >> /root/.bashrc \
-    && echo 'if [ -f "/workspaces/isaac-sim-ur5e/underlay_ws/install/setup.bash" ]; then' >> /root/.bashrc \
-    && echo '    source /workspaces/isaac-sim-ur5e/underlay_ws/install/setup.bash' >> /root/.bashrc \
-    && echo 'fi' >> /root/.bashrc \
-    && echo '' >> /root/.bashrc \
-    && echo '# Project overlay workspace' >> /root/.bashrc \
-    && echo 'if [ -f "/workspaces/isaac-sim-ur5e/colcon_ws/install/setup.bash" ]; then' >> /root/.bashrc \
-    && echo '    source /workspaces/isaac-sim-ur5e/colcon_ws/install/setup.bash' >> /root/.bashrc \
-    && echo 'fi' >> /root/.bashrc \
-    && echo 'cd /workspaces/isaac-sim-ur5e' >> /root/.bashrc
+# ============================================================
+# Shell configuration
+# ============================================================
+# Copy shell configuration files from docker/ directory
+# - .profile: Sets up ROS environment for both interactive and non-interactive shells
+# - .bashrc: Standard interactive shell configuration
+# This approach ensures:
+#   1. Version control of shell configuration
+#   2. Portability (git clone + docker-compose up works out of the box)
+#   3. Non-interactive shells (e.g., Claude Code) can access ROS environment
+COPY docker/.profile /root/.profile
+COPY docker/.bashrc /root/.bashrc
 
 WORKDIR /workspaces/isaac-sim-ur5e
 USER root
