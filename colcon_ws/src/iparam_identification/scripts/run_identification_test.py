@@ -15,6 +15,7 @@ Usage:
 import argparse
 import os
 import sys
+import threading
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Tuple, Optional, List
@@ -362,6 +363,7 @@ def run_simulation_and_collect_data(
     robot,
     kinematics,
     trajectory: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    headless: bool = True,
     physics_dt: float = 1/240,
 ) -> Tuple[np.ndarray, List[np.ndarray]]:
     """Run simulation and collect data for parameter estimation.
@@ -392,12 +394,34 @@ def run_simulation_and_collect_data(
 
     log(f"[INFO] Running simulation ({n_steps} steps, {timestamps[-1]:.1f}s)...")
 
+    # GUIモードの場合は入力待機（インタラクティブ）
+    if not headless:
+        log("\n[Waiting] Scene is ready. Press Enter to start trajectory execution...")
+        log("         (You can interact with the GUI: move camera, zoom, etc.)")
+
+        # 入力待機を別スレッドで実行
+        input_received = threading.Event()
+
+        def wait_for_input():
+            """Wait for Enter key in separate thread."""
+            input()
+            input_received.set()
+
+        input_thread = threading.Thread(target=wait_for_input, daemon=True)
+        input_thread.start()
+
+        # メインスレッドでアイドルレンダリング（GUIを応答的に保つ）
+        while not input_received.is_set():
+            world.step(render=True)
+
+        log("\n[INFO] Starting trajectory execution...")
+
     # Move to start position first
     robot.set_joint_positions(q_des[0])
     robot.set_joint_velocities(np.zeros(6))
 
     for _ in range(100):  # Settle
-        world.step(render=False)
+        world.step(render=not headless)
 
     # Run trajectory
     for i in range(n_steps):
@@ -406,7 +430,7 @@ def run_simulation_and_collect_data(
         robot.apply_action(ArticulationAction(joint_positions=target_q))
 
         # Step simulation
-        world.step(render=False)
+        world.step(render=not headless)
 
         # Get actual state
         q_actual = robot.get_joint_positions()
@@ -523,7 +547,7 @@ def run_identification_test():
         # Run simulation and collect data
         log("\n[Data Collection]")
         A_stacked, A_list = run_simulation_and_collect_data(
-            world, robot, kin, trajectory
+            world, robot, kin, trajectory, headless=headless
         )
 
         # Compute true y using ground truth parameters

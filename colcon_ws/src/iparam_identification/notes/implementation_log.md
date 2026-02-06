@@ -482,6 +482,216 @@ cat /tmp/iparam_identification.log
 
 ---
 
+## GUI可視化機能の改善 ✅ 完了
+
+**実装日**: 2026-02-06
+**ステータス**: 完了
+
+### 概要
+
+Isaac Sim統合テストのGUIモードに、インタラクティブな可視化機能を追加。ユーザーがシーンを確認してから軌道実行を開始できるようにした。
+
+### 実装内容
+
+#### 問題点（修正前）
+
+1. **レンダリングがハードコード**: `world.step(render=False)`で固定
+   - GUIモードで起動しても画面が更新されない
+   - 軌道実行中の動きが見えない
+
+2. **待機機能なし**: スクリプト起動と同時に軌道実行開始
+   - シーンの確認ができない
+   - カメラアングルの調整ができない
+
+3. **非インタラクティブ**: メインスレッドでの同期実行
+   - 待機中にGUIがフリーズ
+   - カメラ操作などができない
+
+#### 解決策（修正後）
+
+**1. レンダリングフラグの動的制御**
+
+```python
+# 修正前
+world.step(render=False)
+
+# 修正後
+world.step(render=not headless)
+```
+
+- GUIモード: `render=True` → 各ステップで画面更新
+- ヘッドレスモード: `render=False` → 高速計算
+
+**修正箇所**:
+- [run_identification_test.py:422](../scripts/run_identification_test.py#L422) (初期化ループ)
+- [run_identification_test.py:431](../scripts/run_identification_test.py#L431) (軌道実行ループ)
+
+**2. マルチスレッド入力待機**
+
+```python
+import threading
+
+# 入力待機を別スレッドで実行
+input_received = threading.Event()
+
+def wait_for_input():
+    """Wait for Enter key in separate thread."""
+    input()
+    input_received.set()
+
+input_thread = threading.Thread(target=wait_for_input, daemon=True)
+input_thread.start()
+
+# メインスレッドでアイドルレンダリング（GUIを応答的に保つ）
+while not input_received.is_set():
+    world.step(render=True)
+```
+
+**特徴**:
+- 入力待機は別スレッド → メインスレッドをブロックしない
+- メインスレッドはアイドルレンダリング → GUIが応答的
+- `threading.Event()`でスレッド間の安全な同期
+
+**修正箇所**:
+- [run_identification_test.py:18](../scripts/run_identification_test.py#L18) (threading import)
+- [run_identification_test.py:365](../scripts/run_identification_test.py#L365) (関数引数にheadless追加)
+- [run_identification_test.py:396-415](../scripts/run_identification_test.py#L396-L415) (入力待機ロジック)
+- [run_identification_test.py:526](../scripts/run_identification_test.py#L526) (関数呼び出しでheadless渡す)
+
+### 使用方法
+
+#### GUIモードで実行
+
+```bash
+cd /workspaces/isaac-sim-ur5e/colcon_ws
+source install/setup.bash
+bash src/iparam_identification/scripts/run_test.sh --gui
+```
+
+#### 実行フロー
+
+1. **Isaac Simウィンドウが開く**
+   - UR5eロボットアーム
+   - アルミペイロード（10×15×20cm）
+   - グラウンドプレーン
+
+2. **ターミナルに表示**
+   ```
+   [Waiting] Scene is ready. Press Enter to start trajectory execution...
+            (You can interact with the GUI: move camera, zoom, etc.)
+   ```
+
+3. **待機中の操作**（この間、GUIは完全にインタラクティブ）
+   - マウスドラッグ: カメラ回転
+   - マウスホイール: ズーム
+   - Shift+ドラッグ: パン
+   - オブジェクト選択: プロパティ確認
+
+4. **Enterキーを押す**
+   ```
+   [INFO] Starting trajectory execution...
+   ```
+
+5. **軌道実行**（15秒間）
+   - ロボットがフーリエ軌道に沿って動く
+   - データ収集（1491サンプル）
+   - 進捗表示（100ステップごと）
+
+6. **推定結果表示**
+   - OLS推定: 質量、重心、慣性
+   - TLS推定: 質量、重心、慣性
+   - 誤差解析
+
+#### ヘッドレスモード（デフォルト）
+
+```bash
+bash src/iparam_identification/scripts/run_test.sh
+```
+
+- 待機なし、すぐに実行開始
+- レンダリングなし、高速計算
+- CI/CD環境での自動テストに適する
+
+### 技術的詳細
+
+#### スレッド構成
+
+| スレッド | 役割 | 実行内容 |
+|---------|------|---------|
+| **メインスレッド** | GUIレンダリング | `world.step(render=True)` でイベントループを回す |
+| **入力スレッド** | 入力待機 | `input()` でEnter待機、完了したらEventをセット |
+
+#### 同期メカニズム
+
+```python
+input_received = threading.Event()  # スレッド間同期用
+
+# 入力スレッド
+input()
+input_received.set()  # フラグをセット
+
+# メインスレッド
+while not input_received.is_set():  # フラグをチェック
+    world.step(render=True)
+```
+
+#### なぜこの設計か
+
+**別スレッドでの入力待機が必要な理由**:
+- Isaac SimのGUIは`world.step()`が呼ばれないとフリーズする
+- メインスレッドで`input()`すると`world.step()`が止まる
+- 入力を別スレッドに分離することで、メインスレッドは継続的にレンダリング可能
+
+**メインスレッドでレンダリングする理由**:
+- OpenGL/Vulkanのコンテキストはメインスレッドに紐付く
+- Isaac Simのレンダリングはメインスレッドで実行されるべき
+- 別スレッドでレンダリングすると描画が不安定になる
+
+### テスト結果
+
+#### 動作確認項目
+
+- ✅ GUIモードでウィンドウが正常に開く
+- ✅ 待機中にカメラ操作が可能
+- ✅ Enterキーで軌道実行が開始される
+- ✅ 軌道実行中の動きがリアルタイムで表示される
+- ✅ ヘッドレスモードは従来通り高速動作
+- ✅ マルチスレッド動作が安定している
+
+#### パフォーマンス
+
+| モード | 15秒軌道の実行時間 | レンダリング | インタラクティブ性 |
+|--------|-------------------|--------------|-------------------|
+| GUIモード | ~15-20秒 | ✅ あり | ✅ あり |
+| ヘッドレス | ~2-3秒 | ❌ なし | ❌ なし |
+
+### 使用例
+
+#### 研究・デモ用途
+
+```bash
+# GUIで可視化しながら実行
+bash src/iparam_identification/scripts/run_test.sh --gui
+
+# ウィンドウが開いたら：
+# 1. カメラアングルを調整
+# 2. ペイロードの配置を確認
+# 3. Enterで実行開始
+# 4. 軌道の動きを観察
+```
+
+#### CI/CD自動テスト
+
+```bash
+# ヘッドレスモードで高速実行
+bash src/iparam_identification/scripts/run_test.sh
+
+# または明示的に
+bash src/iparam_identification/scripts/run_test.sh --headless
+```
+
+---
+
 ## 変更履歴
 
 | 日付 | Phase | 内容 |
@@ -489,4 +699,5 @@ cat /tmp/iparam_identification.log
 | 2026-02-03 | 1 | センサー統合モジュール実装完了 |
 | 2026-02-04 | 2 | 推定アルゴリズムモジュール実装完了 |
 | 2026-02-04 | V | Isaac Sim統合テスト完了（質量誤差0.01%達成） |
+| 2026-02-06 | GUI | GUI可視化機能改善（インタラクティブ操作、マルチスレッド入力待機） |
 | - | 3 | （任意） |
