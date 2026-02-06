@@ -155,6 +155,34 @@ RUN ${ISAAC_PYTHON} -m pip install --no-cache-dir \
     matplotlib
 
 # ============================================================
+# Build underlay_ws template (ur_description)
+# ============================================================
+# This creates a pre-built underlay_ws that will be copied
+# to the mounted workspace on first container startup
+WORKDIR /opt/underlay_ws_template
+
+RUN mkdir -p src && cd src \
+    && git clone -b jazzy \
+        https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git \
+        ur_description \
+    && cd ..
+
+# Build the template underlay_ws
+RUN /bin/bash -c "source /isaac-sim/setup_python_env.sh \
+    && source /opt/ros311/setup.bash \
+    && colcon build --symlink-install \
+        --cmake-args \
+            -DPython3_EXECUTABLE=${ISAAC_PYTHON} \
+            -DPYTHON_EXECUTABLE=${ISAAC_PYTHON}"
+
+# Generate URDF cache
+RUN /bin/bash -c "source install/setup.bash \
+    && mkdir -p /tmp/ur_urdf_cache \
+    && ${ISAAC_PYTHON} /usr/local/bin/xacro \
+        install/ur_description/share/ur_description/urdf/ur.urdf.xacro \
+        ur_type:=ur5e name:=ur5e > /tmp/ur_urdf_cache/ur5e.urdf"
+
+# ============================================================
 # Environment setup
 # ============================================================
 ENV ROS_DISTRO=jazzy

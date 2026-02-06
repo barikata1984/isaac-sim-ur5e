@@ -90,8 +90,8 @@
     },
 
     // Run after container creation (first time only)
-    // Build underlay_ws and colcon_ws
-    "postCreateCommand": "/bin/bash /workspaces/isaac-sim-ur5e/docker/scripts/init_workspaces.sh",
+    // Workspace initialization is handled automatically by entrypoint.sh
+    "postCreateCommand": "",
 
     // Run on container start (every time)
     "postStartCommand": "/bin/bash -c 'source /isaac-sim/setup_python_env.sh && source /opt/ros311/setup.bash'",

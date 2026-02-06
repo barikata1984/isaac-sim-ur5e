@@ -38,3 +38,5 @@ AGENTS.md
 
 # System
 .DS_Store
+.build_completed
+.build_completed

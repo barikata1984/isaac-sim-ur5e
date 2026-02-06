@@ -61,22 +61,21 @@ mkdir -p src
 # Check if there are any packages in src
 if [ -z "$(ls -A src 2>/dev/null)" ]; then
     log_warn "underlay_ws/src is empty. No packages to build."
-    log_info "If you need ur_description, it should be mounted or cloned."
+    log_info "Note: If Dockerfile built a template, it should have been copied by entrypoint.sh"
+    log_info "You can manually add packages to underlay_ws/src and run rebuild_underlay.sh"
+    # Create empty install structure if no packages
+    mkdir -p install
 else
     log_info "Found packages in underlay_ws/src:"
     ls -1 src/
-fi
 
-# Build underlay (even if empty, to create install directory structure)
-log_info "Building underlay_ws..."
-source /opt/ros311/setup.bash
-
-if [ -z "$(ls -A src 2>/dev/null)" ]; then
-    # Create empty install structure if no packages
-    mkdir -p install
-    log_warn "No packages to build in underlay_ws."
-else
-    colcon build --symlink-install
+    # Build underlay
+    log_info "Building underlay_ws..."
+    source /opt/ros311/setup.bash
+    colcon build --symlink-install \
+        --cmake-args \
+            -DPython3_EXECUTABLE=/isaac-sim/kit/python/bin/python3.11 \
+            -DPYTHON_EXECUTABLE=/isaac-sim/kit/python/bin/python3.11
     log_info "✓ Underlay build complete"
 fi
 

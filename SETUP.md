@@ -17,45 +17,32 @@ git clone <repository-url>
 cd isaac-sim-ur5e
 ```
 
-### 2. Underlay Workspace の準備
+### 2. コンテナのビルドと起動
 
-underlay_ws には、ROS 2 の依存パッケージを配置します。
-
-#### 2-1. ur_description の追加（必須）
-
-```bash
-cd underlay_ws/src
-git clone -b jazzy https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git ur_description
-cd ../..
-```
-
-#### 2-2. その他のパッケージ（オプション）
-
-必要に応じて、他のROS 2パッケージも `underlay_ws/src` に追加できます。
-
-### 3. コンテナのビルドと起動
+**重要**: underlay_ws の準備は自動的に行われます。Dockerイメージビルド時に ur_description が含まれ、初回コンテナ起動時に自動的にセットアップされます。
 
 #### 方法A: VSCode Dev Containers（推奨）
 
 1. VSCode でプロジェクトを開く
 2. コマンドパレット（Ctrl+Shift+P）から "Dev Containers: Reopen in Container" を実行
-3. 初回起動時、自動的に underlay_ws と colcon_ws がビルドされます（5-10分程度）
+3. 初回起動時、entrypoint.sh により自動的に underlay_ws と colcon_ws がビルドされます（3-5分程度）
 
 #### 方法B: Docker Compose
 
 ```bash
 cd docker
-docker-compose -f docker-compose.approach-b.yml up -d
+docker-compose -f docker-compose.approach-b.yml build  # イメージビルド（初回のみ）
+docker-compose -f docker-compose.approach-b.yml up -d   # コンテナ起動
 docker exec -it isaac-sim-ur5e-approach-b /bin/bash
 ```
 
-初回起動時は、コンテナ内で以下を実行してワークスペースをビルドします:
+初回起動時、entrypoint.sh により自動的にワークスペースがビルドされます。ログを確認するには:
 
 ```bash
-/bin/bash /workspaces/isaac-sim-ur5e/docker/scripts/init_workspaces.sh
+docker logs isaac-sim-ur5e-approach-b
 ```
 
-### 4. ビルドの確認
+### 3. ビルドの確認
 
 コンテナ内で以下を実行して、ワークスペースがビルドされていることを確認します:
 
@@ -69,17 +56,19 @@ ros2 pkg list | grep ur_description
 ros2 pkg list | grep core
 ```
 
-## ワークスペース構成
+## ワークスペース構成と自動ビルドフロー
+
+### ディレクトリ構成
 
 ```
 isaac-sim-ur5e/
 ├── underlay_ws/          # 依存パッケージ（ur_description等）
-│   ├── src/
+│   ├── src/             # ホストからマウント or イメージからコピー
 │   ├── build/           # Docker volume でキャッシュ
 │   └── install/         # Docker volume でキャッシュ
 │
 ├── colcon_ws/           # プロジェクトパッケージ
-│   ├── src/
+│   ├── src/             # ホストからマウント
 │   │   ├── core/
 │   │   ├── ur/
 │   │   ├── trajectories/
@@ -93,8 +82,46 @@ isaac-sim-ur5e/
     ├── scripts/
     │   ├── init_workspaces.sh     # 初回ビルドスクリプト
     │   └── rebuild_underlay.sh    # 再ビルドスクリプト
-    └── ...
+    ├── entrypoint.sh              # コンテナ起動時処理
+    └── Dockerfile.approach-b      # イメージビルド定義
 ```
+
+### 自動ビルドフロー
+
+#### 1. イメージビルド時 (Dockerfile)
+
+```
+Dockerfile → /opt/underlay_ws_template/ を作成
+  ├── ur_description をクローン
+  ├── ビルド実行
+  └── URDF キャッシュ生成
+```
+
+#### 2. 初回コンテナ起動時 (entrypoint.sh)
+
+```
+entrypoint.sh
+  ├── ビルドマーカー確認
+  ├── underlay_ws/src が空なら
+  │   └── /opt/underlay_ws_template/src をコピー
+  └── init_workspaces.sh を実行
+      ├── Phase 1: underlay_ws ビルド
+      ├── Phase 2: URDF キャッシュ生成
+      ├── Phase 3: colcon_ws ビルド
+      └── ビルドマーカー作成
+```
+
+#### 3. 2回目以降の起動
+
+```
+entrypoint.sh
+  └── ビルドマーカー存在 → スキップ（高速起動）
+```
+
+この設計により:
+- **devcontainer なしでも動作**: docker-compose だけで完全に動作
+- **ビルドキャッシュ**: Docker volume により高速な再ビルド
+- **冪等性**: 何度起動しても安全
 
 ## トラブルシューティング
 
@@ -108,16 +135,23 @@ isaac-sim-ur5e/
 
 ### ur_description が見つからない
 
-1. underlay_ws/src に ur_description が存在するか確認:
+通常は自動的にセットアップされますが、問題がある場合:
+
+1. ビルドマーカーを削除して再初期化:
    ```bash
-   ls -la /workspaces/isaac-sim-ur5e/underlay_ws/src/
+   rm -f /workspaces/isaac-sim-ur5e/.build_completed
+   # コンテナを再起動
    ```
 
-2. 存在しない場合は追加してビルド:
+2. 手動で再ビルド:
    ```bash
-   cd /workspaces/isaac-sim-ur5e/underlay_ws/src
-   git clone -b jazzy https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git ur_description
-   cd ..
+   /bin/bash /workspaces/isaac-sim-ur5e/docker/scripts/rebuild_underlay.sh
+   ```
+
+3. テンプレートから手動でコピー（イメージにテンプレートがある場合）:
+   ```bash
+   cp -r /opt/underlay_ws_template/src/* /workspaces/isaac-sim-ur5e/underlay_ws/src/
+   cd /workspaces/isaac-sim-ur5e/underlay_ws
    source /opt/ros311/setup.bash
    colcon build --symlink-install
    ```

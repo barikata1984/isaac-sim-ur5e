@@ -49,8 +49,32 @@ fi
 # --------------------------------------------
 # Initialize workspaces on first run
 # --------------------------------------------
-if [ -f "/workspaces/isaac-sim-ur5e/docker/scripts/init_workspaces.sh" ]; then
-    /bin/bash /workspaces/isaac-sim-ur5e/docker/scripts/init_workspaces.sh
+echo "[Entrypoint] Checking workspace initialization..."
+
+PROJECT_ROOT="/workspaces/isaac-sim-ur5e"
+BUILD_MARKER="$PROJECT_ROOT/.build_completed"
+
+# Check if workspace initialization is needed
+if [ ! -f "$BUILD_MARKER" ]; then
+    echo "[Entrypoint] First run detected. Initializing workspaces..."
+
+    # Copy underlay_ws template if underlay is empty
+    if [ -d "/opt/underlay_ws_template" ] && [ -z "$(ls -A $PROJECT_ROOT/underlay_ws/src 2>/dev/null)" ]; then
+        echo "[Entrypoint] Copying underlay_ws template from image..."
+        mkdir -p "$PROJECT_ROOT/underlay_ws"
+        cp -r /opt/underlay_ws_template/src "$PROJECT_ROOT/underlay_ws/" || true
+        echo "[Entrypoint] Template copied."
+    fi
+
+    # Run workspace initialization script
+    if [ -f "$PROJECT_ROOT/docker/scripts/init_workspaces.sh" ]; then
+        echo "[Entrypoint] Running init_workspaces.sh..."
+        /bin/bash "$PROJECT_ROOT/docker/scripts/init_workspaces.sh"
+    else
+        echo "[Entrypoint] WARNING: init_workspaces.sh not found!"
+    fi
+else
+    echo "[Entrypoint] Workspaces already initialized."
 fi
 
 # --------------------------------------------
