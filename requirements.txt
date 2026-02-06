@@ -1,0 +1,34 @@
+# ============================================================
+# Isaac Sim UR5e - Python Package Requirements
+# ============================================================
+# Install with: /isaac-sim/kit/python/bin/python3.11 -m pip install -r requirements.txt
+# ============================================================
+
+# ROS 2 build tools
+empy==3.3.4
+catkin_pkg
+lark
+colcon-common-extensions
+vcstool
+rosinstall-generator
+rosdep
+
+# Build tools
+pybind11[global]
+setuptools==70.0.0
+
+# URDF processing
+xacro
+
+# Scientific computing
+numpy
+scipy
+matplotlib
+
+# Pinocchio (dynamics library)
+pin==2.7.0
+
+# Utilities
+PyYAML
+netifaces
+psutil

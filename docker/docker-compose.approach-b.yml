@@ -82,6 +82,14 @@ services:
       - colcon_install_cache:/workspaces/isaac-sim-ur5e/colcon_ws/install
       - colcon_log_cache:/workspaces/isaac-sim-ur5e/colcon_ws/log
 
+      # --------------------------------------------
+      # underlay build cache (for faster builds)
+      # Persisted as named volumes
+      # --------------------------------------------
+      - underlay_build_cache:/workspaces/isaac-sim-ur5e/underlay_ws/build
+      - underlay_install_cache:/workspaces/isaac-sim-ur5e/underlay_ws/install
+      - underlay_log_cache:/workspaces/isaac-sim-ur5e/underlay_ws/log
+
     devices:
       # DRI device (for GPU rendering)
       - /dev/dri:/dev/dri
@@ -111,4 +119,13 @@ volumes:
   colcon_install_cache:
     driver: local
   colcon_log_cache:
+    driver: local
+
+  # underlay build cache
+  # Preserves underlay artifacts across container restarts
+  underlay_build_cache:
+    driver: local
+  underlay_install_cache:
+    driver: local
+  underlay_log_cache:
     driver: local

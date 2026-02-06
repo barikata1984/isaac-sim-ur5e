@@ -47,6 +47,13 @@ if [ -d "/root/.ssh" ]; then
 fi
 
 # --------------------------------------------
+# Initialize workspaces on first run
+# --------------------------------------------
+if [ -f "/workspaces/isaac-sim-ur5e/docker/scripts/init_workspaces.sh" ]; then
+    /bin/bash /workspaces/isaac-sim-ur5e/docker/scripts/init_workspaces.sh
+fi
+
+# --------------------------------------------
 # Execute the main command
 # --------------------------------------------
 exec "$@"

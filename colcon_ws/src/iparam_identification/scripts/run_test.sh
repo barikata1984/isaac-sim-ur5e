@@ -13,7 +13,13 @@ echo "=========================================="
 echo "Package: $PACKAGE_DIR"
 echo "Workspace: $WORKSPACE_DIR"
 
-# Source ROS 2 workspace
+# Source ROS 2 workspaces (underlay first, then overlay)
+UNDERLAY_DIR="$(dirname "$WORKSPACE_DIR")/underlay_ws"
+if [ -f "$UNDERLAY_DIR/install/setup.bash" ]; then
+    source "$UNDERLAY_DIR/install/setup.bash"
+    echo "Sourced: $UNDERLAY_DIR/install/setup.bash"
+fi
+
 if [ -f "$WORKSPACE_DIR/install/setup.bash" ]; then
     source "$WORKSPACE_DIR/install/setup.bash"
     echo "Sourced: $WORKSPACE_DIR/install/setup.bash"

@@ -37,6 +37,8 @@
                 "python.analysis.extraPaths": [
                     // ROS 2 Python 3.11 build
                     "/opt/ros311/lib/python3.11/site-packages",
+                    // Project underlay_ws
+                    "/workspaces/isaac-sim-ur5e/underlay_ws/install/lib/python3.11/site-packages",
                     // Project colcon_ws
                     "/workspaces/isaac-sim-ur5e/colcon_ws/install/lib/python3.11/site-packages",
                     // Isaac Sim packages
@@ -88,8 +90,8 @@
     },
 
     // Run after container creation (first time only)
-    // Source ROS environment and build colcon workspace
-    "postCreateCommand": "/bin/bash -c 'source /opt/ros311/setup.bash && cd /workspaces/isaac-sim-ur5e/colcon_ws && colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE=/isaac-sim/kit/python/bin/python3.11'",
+    // Build underlay_ws and colcon_ws
+    "postCreateCommand": "/bin/bash /workspaces/isaac-sim-ur5e/docker/scripts/init_workspaces.sh",
 
     // Run on container start (every time)
     "postStartCommand": "/bin/bash -c 'source /isaac-sim/setup_python_env.sh && source /opt/ros311/setup.bash'",

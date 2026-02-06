@@ -88,21 +88,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Install Python packages (directly into Isaac Sim Python)
+# Install Python packages from requirements.txt
 # ============================================================
-# empy 3.3.4 is mandatory for ROS 2 Jazzy build
-RUN ${ISAAC_PYTHON} -m pip install --no-cache-dir \
-    empy==3.3.4 \
-    catkin_pkg \
-    lark \
-    colcon-common-extensions \
-    vcstool \
-    "pybind11[global]" \
-    PyYAML \
-    numpy \
-    setuptools==70.0.0 \
-    netifaces \
-    psutil
+COPY requirements.txt /tmp/requirements.txt
+RUN ${ISAAC_PYTHON} -m pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
 
 # ============================================================
 # Set up ROS 2 repository
@@ -182,7 +172,12 @@ RUN echo '# Isaac Sim Python environment' >> /root/.bashrc \
     && echo 'export ROS_DISTRO=jazzy' >> /root/.bashrc \
     && echo 'source /opt/ros311/setup.bash 2>/dev/null || true' >> /root/.bashrc \
     && echo '' >> /root/.bashrc \
-    && echo '# Project workspace' >> /root/.bashrc \
+    && echo '# Project underlay workspace' >> /root/.bashrc \
+    && echo 'if [ -f "/workspaces/isaac-sim-ur5e/underlay_ws/install/setup.bash" ]; then' >> /root/.bashrc \
+    && echo '    source /workspaces/isaac-sim-ur5e/underlay_ws/install/setup.bash' >> /root/.bashrc \
+    && echo 'fi' >> /root/.bashrc \
+    && echo '' >> /root/.bashrc \
+    && echo '# Project overlay workspace' >> /root/.bashrc \
     && echo 'if [ -f "/workspaces/isaac-sim-ur5e/colcon_ws/install/setup.bash" ]; then' >> /root/.bashrc \
     && echo '    source /workspaces/isaac-sim-ur5e/colcon_ws/install/setup.bash' >> /root/.bashrc \
     && echo 'fi' >> /root/.bashrc \
