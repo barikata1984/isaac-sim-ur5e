@@ -18,7 +18,7 @@ services:
       - ${HOME}/docker/isaac-sim/cache/computecache:/root/.nv/ComputeCache
       - ${HOME}/docker/isaac-sim/data:/root/.local/share/ov/data
       # SSH and Git config from host
-      - ${HOME}/.ssh:/root/.ssh:ro
+      - ${HOME}/.ssh:/root/.ssh
       - ${HOME}/.gitconfig:/root/.gitconfig:ro
       # Workspace
       - ..:/workspaces/isaac-sim-ur5e

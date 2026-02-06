@@ -61,7 +61,7 @@ services:
       # --------------------------------------------
       # Development config (read-only from host)
       # --------------------------------------------
-      - ${HOME}/.ssh:/root/.ssh:ro
+      - ${HOME}/.ssh:/root/.ssh
       - ${HOME}/.gitconfig:/root/.gitconfig:ro
 
       # --------------------------------------------
