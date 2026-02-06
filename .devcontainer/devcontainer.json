@@ -16,8 +16,8 @@
                 "ms-python.vscode-pylance",
                 "ms-python.debugpy",
 
-                // ROS development
-                "ms-iot.vscode-ros",
+                // Claude Code
+                "anthropic.claude-code",
 
                 // C++/CMake (for ROS packages)
                 "ms-vscode.cmake-tools",
